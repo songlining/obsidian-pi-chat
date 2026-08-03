@@ -136,6 +136,20 @@
   TUI-specific side effects (bell, osascript notifications, tmux/shell
   assumptions) and add mode guards.
 
+### 7. Vault context not established: AGENTS.md shadows CLAUDE.md
+- Pi's context discovery loads **one file per directory**, preferring
+  `AGENTS.md` over `CLAUDE.md` (`resource-loader.js` candidates list). A vault
+  with both at its root silently drops `CLAUDE.md`, so the embedded agent
+  misses the vault's main instructions.
+- Symptom: the agent answers correctly but doesn't know the vault's
+  schema/rules that live in `CLAUDE.md`.
+- Fix (in the plugin): detect both files at the vault root and spawn with
+  `--append-system-prompt <vault>/CLAUDE.md` so the content reaches the model
+  even though pi doesn't track it as a context file.
+- Verify: ask the agent to quote something distinctive from the vault
+  `CLAUDE.md` (appended content appears in the system prompt, not in the
+  agent's "context files" list).
+
 ## Handy one-liners
 
 ```bash

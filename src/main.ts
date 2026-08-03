@@ -7,6 +7,8 @@
  * and sessions work exactly as in the terminal.
  */
 import { Plugin, Notice } from "obsidian";
+import { existsSync } from "fs";
+import { join } from "path";
 import { PiChatView, VIEW_TYPE_PI_CHAT } from "./pi-chat-view";
 import { Conversation } from "./conversation";
 import { detectPi, getPiVersion, type PiEnvironment } from "./env";
@@ -116,6 +118,7 @@ export default class PiChatPlugin extends Plugin {
     const persisted = this.settings.tabSessions[key];
     const resolvedArg = opts.sessionArg ?? (persisted ? ["--session", persisted] : undefined);
     const vaultPath = this.getVaultPath();
+    const contextAppend = this.getShadowedContextFile(vaultPath);
     const conversation = new Conversation(
       key,
       {
@@ -123,7 +126,14 @@ export default class PiChatPlugin extends Plugin {
         cwd: vaultPath,
         env: env.env,
         sessionArg: resolvedArg,
-        extraArgs: this.settings.extraArgs,
+        extraArgs: [
+          ...(this.settings.extraArgs ?? []),
+          // Pi loads one context file per directory (AGENTS.md preferred over
+          // CLAUDE.md). If the vault has both, the vault's CLAUDE.md is shadowed
+          // and never reaches the model; append it so the agent establishes its
+          // full vault context.
+          ...(contextAppend ? ["--append-system-prompt", contextAppend] : []),
+        ],
         version: env.version ?? undefined,
       },
       {
@@ -220,6 +230,22 @@ export default class PiChatPlugin extends Plugin {
     const adapter = this.app.vault.adapter as { getBasePath?: () => string };
     if (adapter.getBasePath) return adapter.getBasePath();
     return this.app.vault.getRoot().path ?? "/";
+  }
+
+  /**
+   * Pi's context-file discovery loads at most ONE file per directory and
+   * prefers AGENTS.md over CLAUDE.md. When a vault has both at its root, the
+   * vault's CLAUDE.md is shadowed. Return its path so the plugin can append
+   * it explicitly (or null when pi already loads it).
+   */
+  private getShadowedContextFile(vaultPath: string): string | null {
+    const has = (name: string) => existsSync(join(vaultPath, name));
+    const agentsExists = has("AGENTS.md") || has("AGENTS.MD");
+    const claudeExists = has("CLAUDE.md") || has("CLAUDE.MD");
+    if (agentsExists && claudeExists) {
+      return join(vaultPath, has("CLAUDE.md") ? "CLAUDE.md" : "CLAUDE.MD");
+    }
+    return null;
   }
 
   async loadSettings(): Promise<void> {

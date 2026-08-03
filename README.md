@@ -48,6 +48,7 @@ Obsidian (renderer)
 
 - **One `pi --mode rpc` subprocess per open conversation**, with `cwd = vault root` so relative tool paths resolve inside the vault.
 - **Binary discovery, zero-config**: resolved once via your login shell (`$SHELL -lic 'which pi'`). A manual path override exists in settings for unusual installs.
+- **Vault context is established automatically**: the subprocess runs with `cwd = vault root`, so pi loads the vault's `AGENTS.md`/`CLAUDE.md` context files, and the plugin appends the vault's `CLAUDE.md` explicitly when `AGENTS.md` would shadow it (pi loads one context file per directory, preferring `AGENTS.md`).
 - **Environment inheritance**: the subprocess gets your full login-shell environment, so `~/.pi` auth and `PI_*` variables behave exactly like in the terminal. **The plugin never stores or requests API keys.**
 - **Sessions are Pi's, not the plugin's**: resume lists this vault's sessions straight from `~/.pi/agent/sessions/`. Terminal-created sessions appear here, and vice-versa.
 
