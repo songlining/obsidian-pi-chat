@@ -1,9 +1,9 @@
 {
-  "id": "obsidian-pi-chat",
+  "id": "pi-chat-local",
   "name": "Pi Chat",
   "version": "1.0.0",
   "minAppVersion": "1.12.0",
-  "description": "Chat with your local Pi coding agent inside Obsidian. Zero-config thin shell over your real `pi` binary — no API keys, no bundled runtime, no plugin-side model config.",
+  "description": "Chat with your local Pi coding agent inside Obsidian. Zero-config thin shell over your real `pi` binary \u2014 no API keys, no bundled runtime, no plugin-side model config.",
   "author": "Larry Song",
   "authorUrl": "https://github.com/songlining",
   "isDesktopOnly": true

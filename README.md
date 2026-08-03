@@ -27,7 +27,7 @@ Pi Chat is a thin shell over your real `pi` binary. It spawns `pi --mode rpc` pe
 
 1. **Community plugins**: search for "Pi Chat" → Install → Enable. *(Available after community review.)*
 2. **BRAT** (early access): add `https://github.com/songlining/obsidian-pi-chat` via the BRAT plugin.
-3. **Manual**: copy `main.js`, `manifest.json`, `styles.css` from the latest [release](https://github.com/songlining/obsidian-pi-chat/releases) into `<vault>/.obsidian/plugins/obsidian-pi-chat/`.
+3. **Manual**: copy `main.js`, `manifest.json`, `styles.css` from the latest [release](https://github.com/songlining/obsidian-pi-chat/releases) into `<vault>/.obsidian/plugins/pi-chat-local/`.
 
 Open a conversation via the **bot ribbon icon** or the command palette:
 
