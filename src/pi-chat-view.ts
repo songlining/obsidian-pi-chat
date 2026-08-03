@@ -614,7 +614,7 @@ export class PiChatView extends ItemView {
   private showRename(): void {
     const conv = this.conversation;
     if (!conv) return;
-    this.showRename();
+    new RenameSessionModal(this.app, conv.state.sessionName ?? "", (name) => void conv.rename(name)).open();
   }
 
   private showMenu(anchor: HTMLElement, evt?: MouseEvent): void {
