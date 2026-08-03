@@ -431,13 +431,14 @@ export class PiChatView extends ItemView {
     if (existing && existing.getAttribute("data-content") === message.thinking) return;
     existing?.remove();
 
-    const block = el.createDiv({ cls: "pi-chat-thinking" });
+    const block = el.createDiv({ cls: "pi-chat-thinking pi-chat-thinking-collapsed" });
     block.setAttribute("data-content", message.thinking ?? "");
     const summary = block.createDiv({ cls: "pi-chat-thinking-summary" });
-    summary.setText("🧠 thinking");
-    const body = block.createDiv({ cls: "pi-chat-thinking-body" });
+    summary.setText("thinking");
+    const body = block.createDiv({ cls: "pi-chat-thinking-body pi-chat-hidden" });
     body.setText(message.thinking ?? "");
     summary.addEventListener("click", () => {
+      block.classList.toggle("pi-chat-thinking-collapsed");
       body.classList.toggle("pi-chat-hidden");
     });
   }
