@@ -76,6 +76,15 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* Obsidian sets user-select: none on .workspace-leaf-content; custom views
+     must re-enable selection so chat text/tool output can be copied. */
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.pi-chat-messages * {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .pi-chat-welcome {
