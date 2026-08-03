@@ -156,7 +156,7 @@ export class PiChatView extends ItemView {
       const setting = (this.app as unknown as { setting?: { open?: () => void; openTabById?: (id: string) => void } }).setting;
       if (setting?.open) {
         setting.open();
-        setting.openTabById?.("pi-chat-local");
+        setting.openTabById?.("obsidian-pi-chat");
       }
     });
     new ButtonComponent(btnRow).setButtonText("Retry detection").onClick(() => {

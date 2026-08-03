@@ -1,8 +1,39 @@
-# Pi Chat — Obsidian plugin
+# Pi Chat
 
-A Claudian-style chat panel for the [Pi coding agent](https://github.com/earendil-works/pi-mono) inside your Obsidian vault.
+Chat with your **local [Pi coding agent](https://github.com/earendil-works/pi-mono)** inside Obsidian.
 
-**The defining constraint: zero extra configuration.** The plugin is a thin shell over your real local `pi` binary (`pi --mode rpc`). No bundled runtime, no API keys, no plugin-side model config. Your `~/.pi` providers, auth, models, extensions, skills and sessions all work exactly as in the terminal.
+Pi Chat is a thin shell over your real `pi` binary. It spawns `pi --mode rpc` per conversation, so your `~/.pi` providers, auth, models, extensions, skills, and sessions all work exactly as they do in the terminal.
+
+> **Zero configuration.** No bundled runtime, no API keys in the plugin, no plugin-side model config. If `pi` works in your terminal, it works here.
+
+![Pi Chat panel](docs/screenshot.png)
+
+## Features
+
+- **Streamed markdown replies** with visible, collapsible tool-call rows
+- **Thinking blocks** — collapsed by default, expandable
+- **Session management**: new chat, resume (including terminal-created sessions), continue-latest, rename, export HTML, session stats
+- **In-chat model switcher and thinking-level switcher** sourced from Pi's own catalogue
+- **Pi extensions work as-is** — extension `select`/`confirm`/`input`/`editor` dialogs render inline in the chat; `notify` maps to an Obsidian Notice
+- **Vault-aware tools** — `edit`/`write` tool rows link to the note, so Obsidian's native change detection refreshes edited files
+- **One leaf per conversation** — use Obsidian's native tab mechanics to switch, split, and pop out
+
+## Requirements
+
+- **Desktop** Obsidian (1.12+)
+- A working local [Pi](https://github.com/earendil-works/pi-mono) installation (the `pi` command resolves from your login shell)
+
+## Installation
+
+1. **Community plugins**: search for "Pi Chat" → Install → Enable. *(Available after community review.)*
+2. **BRAT** (early access): add `https://github.com/songlining/obsidian-pi-chat` via the BRAT plugin.
+3. **Manual**: copy `main.js`, `manifest.json`, `styles.css` from the latest [release](https://github.com/songlining/obsidian-pi-chat/releases) into `<vault>/.obsidian/plugins/obsidian-pi-chat/`.
+
+Open a conversation via the **bot ribbon icon** or the command palette:
+
+- `Pi Chat: New conversation`
+- `Pi Chat: Resume session…`
+- `Pi Chat: Continue last session`
 
 ## How it works
 
@@ -10,53 +41,56 @@ A Claudian-style chat panel for the [Pi coding agent](https://github.com/earendi
 Obsidian (renderer)
  └─ PiChatView (one workspace leaf per conversation)
      └─ PiSession
-         └─ child_process.spawn(<pi-path>, ["--mode","rpc", ...], { cwd: vaultRoot })
+         └─ child_process.spawn(<pi>, ["--mode","rpc", ...], { cwd: vault root })
               stdin  ← JSONL commands (prompt, abort, set_model, …)
               stdout → JSONL events (message_update, tool_execution_*, …)
 ```
 
-- **One `pi --mode rpc` subprocess per open conversation**, spawned with `cwd = vault root` so relative tool paths resolve inside the vault.
-- **Binary discovery, zero-config:** resolved once via your login shell (`$SHELL -lic 'which pi'`), because the GUI app's PATH lacks `~/.bun/bin`. A manual override exists in settings.
-- **Environment inheritance:** the subprocess gets the full login-shell environment, so `~/.pi` auth and `PI_*` variables behave like in the terminal. The plugin never stores API keys.
-- **Sessions are Pi's, not the plugin's:** resume lists this vault's sessions directly from `~/.pi/agent/sessions/--<encoded-cwd>--/`. Terminal-created sessions appear and can be resumed inside Obsidian, and vice-versa.
-- **Strict JSONL framing:** split on `\n` only (never Node `readline`, which also splits on U+2028/U+2029).
+- **One `pi --mode rpc` subprocess per open conversation**, with `cwd = vault root` so relative tool paths resolve inside the vault.
+- **Binary discovery, zero-config**: resolved once via your login shell (`$SHELL -lic 'which pi'`). A manual path override exists in settings for unusual installs.
+- **Environment inheritance**: the subprocess gets your full login-shell environment, so `~/.pi` auth and `PI_*` variables behave exactly like in the terminal. **The plugin never stores or requests API keys.**
+- **Sessions are Pi's, not the plugin's**: resume lists this vault's sessions straight from `~/.pi/agent/sessions/`. Terminal-created sessions appear here, and vice-versa.
 
-## Features (v1)
+## Settings
 
-- Streamed markdown replies (throttled re-render) with visible, collapsible tool-call rows
-- Thinking blocks (collapsed, expandable)
-- Session management: new chat, resume (fuzzy modal over this vault's Pi sessions), continue-latest, rename, export HTML, session stats
-- In-chat model switcher and thinking-level switcher sourced from Pi's own catalogue (`get_available_models` / `get_available_thinking_levels`)
-- Pi extension UI dialogs (`select` / `confirm` / `input` / `editor`) rendered inline; `notify` maps to an Obsidian Notice; installed Pi extensions stay fully functional
-- `edit`/`write` tool rows link to the vault note so Obsidian's native change detection refreshes it
-- Error handling: binary-not-found setup notice, process-death Retry (re-spawns with the same `--session <id>`), malformed RPC lines skipped, unknown event types ignored
+Three fields, nothing more:
+
+| Setting | Purpose |
+|---|---|
+| Pi binary path | Manual override (default: auto-detect via login shell) |
+| Extra CLI args | Escape hatch, appended to `pi --mode rpc …` |
+| HTML export folder | Vault-relative folder for exported sessions |
+
+Everything else lives in `~/.pi` by design.
+
+## Privacy
+
+- All model traffic goes directly from the local `pi` process to your configured provider, using **your** credentials from `~/.pi`.
+- The plugin stores no conversations, no API keys, and no analytics. Plugin `data.json` holds only trivial UI preferences (paths, export folder, tab→session pointers).
+- Tools run with no approval gate and full filesystem access to the vault (the same trust model as running `pi` in a terminal pointed at the vault).
+
+## Troubleshooting
+
+- **"Pi binary not found"**: the panel shows a setup notice with a link to settings. Either install `pi` (e.g. `curl -fsSL https://bun.sh/install | bash && bun add -g @earendil-works/pi-coding-agent`), or set the path manually.
+- **Session errors / provider errors** appear as red rows; **process death** shows the last stderr with a Retry button that restarts on the same session.
+- See [docs/obsidian-cli-plugin-debugging.md](docs/obsidian-cli-plugin-debugging.md) for debugging an embedded plugin with the `obsidian` CLI.
 
 ## Development
 
 ```bash
 npm install
-npm run build        # type-check + esbuild -> main.js, copies into the vault plugin dir
-npm run dev          # watch mode (esbuild)
+npm run build        # type-check + esbuild -> main.js (+ versions.json etc.)
 npm test             # unit tests (vitest)
-npm run test:integration   # spawns the real local pi and asserts the RPC event flow
-npm run copy         # copy built files into the vault (default: ~/work/hashicorp/obsidian-notes)
+npm run test:integration   # drives a real local pi --mode rpc and asserts the event flow
 ```
 
-The build copies `main.js`, `manifest.json`, `styles.css` into
-`<vault>/.obsidian/plugins/pi-chat/` for live testing.
+The CI release workflow builds and attaches `main.js`, `manifest.json`, `styles.css` to a GitHub release on tag push.
 
-## Manual smoke checklist
+## Not the same as …
 
-- [ ] New chat (ribbon icon / command) opens a leaf and streams a reply
-- [ ] Resume a terminal-created session from the fuzzy modal
-- [ ] Continue-last resumes the newest session
-- [ ] Model switch and thinking-level switch update the header chips
-- [ ] Abort mid-stream stops the run
-- [ ] An extension dialog renders inline and its answer is delivered to the extension
-- [ ] Kill the pi process; the Retry button restarts on the same session
-- [ ] Export HTML writes a file; Session info shows stats
+- **[PiChat](https://github.com/gengyabc/obsidian-pi-plugin)** by Geng — a similar idea that requires manual pi/node path configuration. Pi Chat is zero-config: it auto-detects the binary and environment, so it works the moment you enable it.
+- **Pivi** — bundles its own pi-ai runtime and requires plugin-side setup. Pi Chat reuses your existing local installation.
 
-## Reference
+## License
 
-- [Pi RPC protocol](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/rpc.md) — local copy at `node_modules/@earendil-works/pi-coding-agent/docs/rpc.md`
-- [Session format](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/session-format.md)
+MIT

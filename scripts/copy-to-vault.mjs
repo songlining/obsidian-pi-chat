@@ -12,7 +12,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
 
 const vaultPath = process.argv[2] || join(process.env.HOME || "~", "work/hashicorp/obsidian-notes");
-const target = join(vaultPath, ".obsidian/plugins/pi-chat-local");
+const target = join(vaultPath, ".obsidian/plugins/obsidian-pi-chat");
 
 mkdirSync(target, { recursive: true });
 for (const file of ["main.js", "manifest.json", "styles.css"]) {

@@ -1,12 +1,12 @@
 import esbuild from "esbuild";
 import process from "process";
-import { copyFileSync, mkdirSync } from "fs";
-import { dirname, join } from "path";
+import { copyFileSync, mkdirSync, existsSync } from "fs";
+import { join } from "path";
 
 const production = process.argv[2] === "production";
 const vaultPluginsDir = join(
   process.env.HOME ?? "~",
-  "work/hashicorp/obsidian-notes/.obsidian/plugins/pi-chat-local",
+  "work/hashicorp/obsidian-notes/.obsidian/plugins/obsidian-pi-chat",
 );
 
 const context = await esbuild.context({
@@ -47,12 +47,18 @@ if (production) {
   await context.rebuild();
   await context.dispose();
 
-  // Copy the plugin bundle into the vault for live testing.
-  mkdirSync(vaultPluginsDir, { recursive: true });
-  for (const file of ["main.js", "manifest.json", "styles.css"]) {
-    copyFileSync(join("", file), join(vaultPluginsDir, file));
+  // Local convenience: copy the bundle into a dev vault for live testing.
+  // Only when the plugin is already installed there (or forced), so CI
+  // builds never touch a local vault path.
+  const shouldCopy =
+    existsSync(vaultPluginsDir) || process.env.PI_CHAT_COPY_TO_VAULT === "1";
+  if (shouldCopy) {
+    mkdirSync(vaultPluginsDir, { recursive: true });
+    for (const file of ["main.js", "manifest.json", "styles.css", "versions.json"]) {
+      if (existsSync(file)) copyFileSync(file, join(vaultPluginsDir, file));
+    }
+    console.log(`\nCopied build -> ${vaultPluginsDir}`);
   }
-  console.log(`\nCopied main.js, manifest.json, styles.css -> ${vaultPluginsDir}`);
 } else {
   await context.watch();
   console.log("Watching for changes...");

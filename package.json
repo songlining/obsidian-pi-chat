@@ -1,7 +1,7 @@
 {
   "name": "obsidian-pi-chat",
-  "version": "0.1.0",
-  "description": "Pi coding agent as an Obsidian chat panel. Thin shell over your local `pi` binary (zero extra config).",
+  "version": "1.0.0",
+  "description": "Chat with your local Pi coding agent inside Obsidian. Zero-config thin shell over your real `pi` binary — no bundled runtime, no API keys, no plugin-side model config.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -16,6 +16,10 @@
   "keywords": ["obsidian", "plugin", "pi", "ai", "coding-agent"],
   "author": "Larry Song",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/songlining/obsidian-pi-chat.git"
+  },
   "devDependencies": {
     "@types/node": "^20.14.0",
     "esbuild": "^0.21.0",
