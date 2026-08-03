@@ -16,7 +16,7 @@ import {
   TFile,
   WorkspaceLeaf,
 } from "obsidian";
-import type { PiChatPlugin } from "./main";
+import type PiChatPlugin from "./main";
 import type { Conversation } from "./conversation";
 import type { UiMessage, UiState, ToolCallUi } from "./reducer";
 import { contentBlocksToParts, toolArgsSummary } from "./reducer";
@@ -156,7 +156,7 @@ export class PiChatView extends ItemView {
       const setting = (this.app as unknown as { setting?: { open?: () => void; openTabById?: (id: string) => void } }).setting;
       if (setting?.open) {
         setting.open();
-        setting.openTabById?.("pi-chat");
+        setting.openTabById?.("pi-chat-local");
       }
     });
     new ButtonComponent(btnRow).setButtonText("Retry detection").onClick(() => {

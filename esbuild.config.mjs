@@ -6,7 +6,7 @@ import { dirname, join } from "path";
 const production = process.argv[2] === "production";
 const vaultPluginsDir = join(
   process.env.HOME ?? "~",
-  "work/hashicorp/obsidian-notes/.obsidian/plugins/pi-chat",
+  "work/hashicorp/obsidian-notes/.obsidian/plugins/pi-chat-local",
 );
 
 const context = await esbuild.context({

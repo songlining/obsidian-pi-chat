@@ -20,7 +20,7 @@ interface ConversationEntry {
   views: Set<PiChatView>;
 }
 
-export class PiChatPlugin extends Plugin {
+export default class PiChatPlugin extends Plugin {
   settings: PiChatSettings = { ...DEFAULT_SETTINGS };
   piEnv: PiEnvironment | null = null;
   private conversations = new Map<string, ConversationEntry>();

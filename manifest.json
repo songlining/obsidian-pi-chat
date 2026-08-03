@@ -1,5 +1,5 @@
 {
-  "id": "pi-chat",
+  "id": "pi-chat-local",
   "name": "Pi Chat",
   "version": "0.1.0",
   "minAppVersion": "1.12.0",
