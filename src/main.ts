@@ -33,17 +33,17 @@ export default class PiChatPlugin extends Plugin {
 
     this.addRibbonIcon("bot", "Pi Chat — new conversation", () => void this.openNewChat());
     this.addCommand({
-      id: "pi-chat-new",
+      id: "new-chat",
       name: "Pi Chat: New conversation",
       callback: () => void this.openNewChat(),
     });
     this.addCommand({
-      id: "pi-chat-resume",
+      id: "resume-session",
       name: "Pi Chat: Resume session…",
       callback: () => void this.openResumeModal(),
     });
     this.addCommand({
-      id: "pi-chat-continue-last",
+      id: "continue-last",
       name: "Pi Chat: Continue last session",
       callback: () => void this.openContinueLast(),
     });
