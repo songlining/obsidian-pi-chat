@@ -122,6 +122,20 @@
   ```
   or just restart Obsidian.
 
+### 6. TUI-only pi extensions fire system notifications from the plugin
+- pi extensions run in the plugin's subprocess **in RPC mode**. Any extension
+  written for the terminal that assumes "no one is watching" will misbehave.
+- Real case: `~/.pi/agent/extensions/tmux-notify.ts` posts a macOS
+  notification on `agent_settled` ("pi / agent finished") to ping the user
+  when they alt-tabbed away from tmux. In RPC mode there is no tmux, its
+  "am I in view?" check always says no, so **every conversation finished with
+  a system popup**.
+- Fix: guard with `ctx.mode` — `if (ctx.mode !== "tui") return;`
+  (`ExtensionMode = "tui" | "rpc" | "json" | "print"`, so RPC is skipped).
+- Lesson: when a plugin embeds pi via RPC, audit user extensions for
+  TUI-specific side effects (bell, osascript notifications, tmux/shell
+  assumptions) and add mode guards.
+
 ## Handy one-liners
 
 ```bash
