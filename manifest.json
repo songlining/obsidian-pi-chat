@@ -1,0 +1,9 @@
+{
+  "id": "pi-chat",
+  "name": "Pi Chat",
+  "version": "0.1.0",
+  "minAppVersion": "1.12.0",
+  "description": "Embed the Pi coding agent as a chat panel in your vault. Thin shell over your local `pi` binary — no bundled runtime, no API keys, no plugin-side model config.",
+  "author": "Larry Song",
+  "isDesktopOnly": true
+}

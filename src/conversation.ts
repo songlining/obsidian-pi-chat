@@ -1,0 +1,329 @@
+/**
+ * Conversation — owns one PiSession subprocess and its UiState, bridging RPC
+ * events through the pure reducer. Views subscribe to state changes.
+ */
+import {
+  initialState,
+  reduce,
+  type Action,
+  type UiState,
+} from "./reducer";
+import { PiSession, type PiSessionOptions } from "./pi-session";
+import type {
+  AgentMessage,
+  ExtensionUiRequest,
+  Model,
+  RpcEvent,
+  SessionStatsData,
+  ThinkingLevel,
+} from "./types";
+
+/** Client-supplied spawn options (the session adds its own event wiring). */
+export type ConversationClientOptions = Pick<
+  PiSessionOptions,
+  "binaryPath" | "cwd" | "env" | "sessionArg" | "extraArgs" | "name"
+>;
+
+export interface ConversationCallbacks {
+  /** Fire-and-forget extension UI notifications (notify/setStatus/setTitle/set_editor_text). */
+  onUiNotification?: (req: ExtensionUiRequest) => void;
+  /** Called once when get_state reports a sessionFile (for tab restore). */
+  onSessionFile?: (file: string) => void;
+  /** Called with version drift diagnostics if the handshake fails. */
+  onSpawnError?: (message: string) => void;
+}
+
+let reqCounter = 0;
+function nextId(prefix: string): string {
+  reqCounter++;
+  return `${prefix}-${Date.now().toString(36)}-${reqCounter}`;
+}
+
+export class Conversation {
+  state: UiState = initialState();
+  session: PiSession;
+  private listeners = new Set<(state: UiState) => void>();
+  private uiNotificationListeners = new Set<(req: ExtensionUiRequest) => void>();
+  private callbacks: ConversationCallbacks;
+  readonly key: string;
+  /** Session file path once known (for restart resume). */
+  sessionFile: string | null = null;
+  private disposed = false;
+
+  constructor(key: string, opts: ConversationClientOptions, callbacks: ConversationCallbacks = {}) {
+    this.key = key;
+    this.callbacks = callbacks;
+    this.session = new PiSession({
+      ...opts,
+      onEvent: (event) => {
+        // Side effects for non-dialog requests happen outside the reducer.
+        this.handleEvent(event);
+        this.dispatch({ type: "rpc", event });
+      },
+      onExit: (code, signal) => {
+        this.dispatch({ type: "session_exited", code, signal, stderr: this.state.stderr });
+      },
+      onStderr: (line) => {
+        // Track stderr for diagnostics without blowing up the state on every line.
+        this.state = { ...this.state, stderr: [...this.state.stderr.slice(-29), line] };
+      },
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Lifecycle
+  // -------------------------------------------------------------------------
+
+  start(): void {
+    this.session.start();
+    void this.refreshState();
+  }
+
+  subscribe(listener: (state: UiState) => void): () => void {
+    this.listeners.add(listener);
+    listener(this.state);
+    return () => this.listeners.delete(listener);
+  }
+
+  /** Subscribe to fire-and-forget extension UI notifications. */
+  onUiNotification(listener: (req: ExtensionUiRequest) => void): () => void {
+    this.uiNotificationListeners.add(listener);
+    return () => this.uiNotificationListeners.delete(listener);
+  }
+
+  emit(): void {
+    if (this.disposed) return;
+    for (const listener of this.listeners) listener(this.state);
+  }
+
+  dispatch(action: Action): void {
+    if (this.disposed) return;
+    const next = reduce(this.state, action);
+    if (next !== this.state) {
+      this.state = next;
+      this.emit();
+    }
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.listeners.clear();
+    this.session.stop();
+  }
+
+  // -------------------------------------------------------------------------
+  // Command helpers (each dispatches the correlated state update)
+  // -------------------------------------------------------------------------
+
+  async refreshState(): Promise<void> {
+    try {
+      const resp = await this.session.send({ type: "get_state" });
+      if (resp.success) {
+        const d = resp.data as {
+          model: Model | null;
+          thinkingLevel: ThinkingLevel;
+          sessionFile?: string;
+          sessionId?: string;
+          sessionName?: string;
+          pendingMessageCount: number;
+        };
+        this.dispatch({
+          type: "session_ready",
+          data: {
+            model: d.model ?? null,
+            thinkingLevel: d.thinkingLevel ?? "medium",
+            isStreaming: false,
+            isCompacting: false,
+            steeringMode: "all",
+            followUpMode: "one-at-a-time",
+            sessionFile: d.sessionFile,
+            sessionId: d.sessionId,
+            sessionName: d.sessionName,
+            autoCompactionEnabled: true,
+            messageCount: 0,
+            pendingMessageCount: d.pendingMessageCount ?? 0,
+          },
+        });
+        if (d.sessionFile && d.sessionFile !== this.sessionFile) {
+          this.sessionFile = d.sessionFile;
+          this.callbacks.onSessionFile?.(d.sessionFile);
+        }
+        // Warm the model/thinking catalogues for the header chips.
+        void this.refreshModels().catch(() => undefined);
+        void this.refreshThinkingLevels().catch(() => undefined);
+      }
+    } catch (err) {
+      this.callbacks.onSpawnError?.(String((err as Error).message ?? err));
+    }
+  }
+
+  async loadHistory(): Promise<void> {
+    try {
+      const resp = await this.session.send({ type: "get_messages" });
+      if (resp.success) {
+        const messages = (resp.data as { messages: import("./types").AgentMessage[] }).messages;
+        this.dispatch({ type: "history_loaded", messages });
+      }
+    } catch {
+      // Non-fatal; the conversation continues from here.
+    }
+  }
+
+  async refreshModels(): Promise<Model[]> {
+    const resp = await this.session.send({ type: "get_available_models" });
+    const models = (resp.data as { models: Model[] }).models ?? [];
+    this.dispatch({ type: "models_available", models });
+    return models;
+  }
+
+  async refreshThinkingLevels(): Promise<ThinkingLevel[]> {
+    const resp = await this.session.send({ type: "get_available_thinking_levels" });
+    const levels = (resp.data as { levels: ThinkingLevel[] }).levels ?? [];
+    this.dispatch({ type: "thinking_levels_available", levels });
+    return levels;
+  }
+
+  async setModel(model: Model): Promise<void> {
+    try {
+      const resp = await this.session.send({
+        type: "set_model",
+        provider: model.provider,
+        modelId: model.id,
+      });
+      if (resp.success) {
+        const updated = (resp.data as Model) ?? model;
+        this.dispatch({ type: "model_changed", model: updated });
+        void this.refreshThinkingLevels().catch(() => undefined);
+      }
+    } catch (err) {
+      this.pushError(`Failed to switch model: ${(err as Error).message}`);
+    }
+  }
+
+  async setThinkingLevel(level: ThinkingLevel): Promise<void> {
+    try {
+      await this.session.send({ type: "set_thinking_level", level });
+      this.dispatch({ type: "thinking_level_changed", level });
+    } catch (err) {
+      this.pushError(`Failed to set thinking level: ${(err as Error).message}`);
+    }
+  }
+
+  async rename(name: string): Promise<void> {
+    if (!name) return;
+    try {
+      await this.session.send({ type: "set_session_name", name });
+      this.dispatch({ type: "session_name_changed", name });
+    } catch (err) {
+      this.pushError(`Failed to rename session: ${(err as Error).message}`);
+    }
+  }
+
+  async exportHtml(folder: string): Promise<string | null> {
+    try {
+      const resp = await this.session.send({
+        type: "export_html",
+        outputPath: folder,
+      });
+      if (resp.success) {
+        const path = (resp.data as { path: string }).path;
+        this.dispatch({ type: "export_done", path });
+        return path;
+      }
+      this.pushError(`Export failed: ${resp.error ?? "unknown error"}`);
+      return null;
+    } catch (err) {
+      this.pushError(`Export failed: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  async getStats(): Promise<import("./types").SessionStatsData | null> {
+    try {
+      const resp = await this.session.send({ type: "get_session_stats" });
+      if (resp.success) {
+        const stats = resp.data as import("./types").SessionStatsData;
+        this.dispatch({ type: "session_stats", stats });
+        return stats;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  async newSession(): Promise<void> {
+    try {
+      const resp = await this.session.send({ type: "new_session" });
+      const cancelled = (resp.data as { cancelled?: boolean } | undefined)?.cancelled ?? false;
+      if (!cancelled) {
+        // The session restarted underneath us: clear the panel.
+        this.state = {
+          ...initialState(),
+          phase: "ready",
+          stderr: this.state.stderr,
+        };
+        this.emit();
+        void this.refreshState();
+        void this.loadHistory();
+      }
+    } catch (err) {
+      this.pushError(`Failed to start new session: ${(err as Error).message}`);
+    }
+  }
+
+  /** Queue a steering message while running, or a plain prompt when idle. */
+  async prompt(text: string): Promise<void> {
+    const streaming = this.state.isRunning || this.state.isStreaming;
+    this.dispatch({ type: "user_message", text });
+    try {
+      await this.session.send({
+        type: "prompt",
+        message: text,
+        streamingBehavior: streaming ? "steer" : undefined,
+      });
+    } catch (err) {
+      this.pushError(`Prompt failed: ${(err as Error).message}`);
+    }
+  }
+
+  abort(): void {
+    void this.session.send({ type: "abort" }).catch(() => undefined);
+  }
+
+  /** Reply to an extension dialog request. */
+  answerExtension(requestId: string, value?: string, confirmed?: boolean, cancelled?: boolean): void {
+    this.session.sendRaw({
+      type: "extension_ui_response",
+      id: requestId,
+      ...(value !== undefined ? { value } : {}),
+      ...(confirmed !== undefined ? { confirmed } : {}),
+      ...(cancelled !== undefined ? { cancelled } : {}),
+    });
+    this.dispatch({ type: "extension_ui_answered", id: requestId });
+  }
+
+  private pushError(message: string): void {
+    this.state = {
+      ...this.state,
+      messages: [
+        ...this.state.messages,
+        { key: `e${this.state.seq + 1}`, kind: "error", text: message },
+      ],
+      seq: this.state.seq + 1,
+    };
+    this.emit();
+  }
+
+  /** Route an event's side effects that don't belong in the reducer. */
+  handleEvent(event: RpcEvent): void {
+    if (event.type === "extension_ui_request" && !isDialogRequest(event)) {
+      this.callbacks.onUiNotification?.(event);
+      for (const listener of this.uiNotificationListeners) listener(event);
+    }
+  }
+}
+
+function isDialogRequest(req: ExtensionUiRequest): boolean {
+  return req.method === "select" || req.method === "confirm" || req.method === "input" || req.method === "editor";
+}

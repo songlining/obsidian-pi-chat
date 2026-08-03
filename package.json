@@ -1,0 +1,27 @@
+{
+  "name": "obsidian-pi-chat",
+  "version": "0.1.0",
+  "description": "Pi coding agent as an Obsidian chat panel. Thin shell over your local `pi` binary (zero extra config).",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "build:fast": "node esbuild.config.mjs production",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "node scripts/integration-test.mjs",
+    "copy": "node scripts/copy-to-vault.mjs",
+    "check": "tsc -noEmit -skipLibCheck"
+  },
+  "keywords": ["obsidian", "plugin", "pi", "ai", "coding-agent"],
+  "author": "Larry Song",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "esbuild": "^0.21.0",
+    "obsidian": "latest",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {}
+}
