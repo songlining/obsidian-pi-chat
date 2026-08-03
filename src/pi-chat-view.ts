@@ -182,7 +182,7 @@ export class PiChatView extends ItemView {
       setIcon(menuBtn, "more-horizontal");
       menuBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        this.showMenu(menuBtn);
+        this.showMenu(menuBtn, e);
       });
     });
 
@@ -617,7 +617,7 @@ export class PiChatView extends ItemView {
     this.showRename();
   }
 
-  private showMenu(anchor: HTMLElement): void {
+  private showMenu(anchor: HTMLElement, evt?: MouseEvent): void {
     const conv = this.conversation;
     if (!conv) return;
     const menu = new Menu();
@@ -662,7 +662,15 @@ export class PiChatView extends ItemView {
         .setIcon("octagon-x")
         .onClick(() => conv.abort()),
     );
-    menu.showAtMouseEvent(new MouseEvent("click"));
+    // Open the menu at the real cursor position (or at the anchor button as a
+    // fallback). A synthetic MouseEvent would open at screen origin 0,0 — the
+    // far left of the window.
+    if (evt) {
+      menu.showAtMouseEvent(evt);
+    } else {
+      const rect = anchor.getBoundingClientRect();
+      menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
+    }
   }
 
   private openVaultFile(path: string): void {
