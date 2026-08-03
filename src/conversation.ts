@@ -21,7 +21,7 @@ import type {
 /** Client-supplied spawn options (the session adds its own event wiring). */
 export type ConversationClientOptions = Pick<
   PiSessionOptions,
-  "binaryPath" | "cwd" | "env" | "sessionArg" | "extraArgs" | "name"
+  "binaryPath" | "cwd" | "env" | "sessionArg" | "extraArgs" | "name" | "version"
 >;
 
 export interface ConversationCallbacks {
@@ -153,7 +153,17 @@ export class Conversation {
         void this.refreshThinkingLevels().catch(() => undefined);
       }
     } catch (err) {
+      const version = this.session.version ? ` (pi ${this.session.version})` : "";
       this.callbacks.onSpawnError?.(String((err as Error).message ?? err));
+      // The get_state handshake failed — surface it as a red row with the
+      // version so version drift is diagnosable.
+      this.state = {
+        ...this.state,
+        phase: "error",
+        error: `Pi handshake failed${version}: ${(err as Error).message}`,
+        stderr: this.state.stderr.slice(-30),
+      };
+      this.emit();
     }
   }
 

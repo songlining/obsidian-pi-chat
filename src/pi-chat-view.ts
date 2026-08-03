@@ -259,6 +259,7 @@ export class PiChatView extends ItemView {
   private renderStatus(state: UiState): void {
     this.statusEl.empty();
     const bits: string[] = [];
+    if (state.phase === "spawning") bits.push("connecting…");
     if (state.isStreaming) bits.push("● streaming…");
     if (state.isRunning && !state.isStreaming) bits.push("working…");
     if (state.pendingQueue > 0) bits.push(`${state.pendingQueue} queued`);

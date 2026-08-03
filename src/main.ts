@@ -124,6 +124,7 @@ export class PiChatPlugin extends Plugin {
         env: env.env,
         sessionArg: resolvedArg,
         extraArgs: this.settings.extraArgs,
+        version: env.version ?? undefined,
       },
       {
         onSessionFile: (file) => {

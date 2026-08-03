@@ -28,6 +28,8 @@ export interface PiSessionOptions {
   extraArgs?: string[];
   /** Optional initial display name (-n). */
   name?: string;
+  /** pi --version string (for handshake-failure diagnostics). */
+  version?: string;
   onEvent: (event: RpcEvent) => void;
   onStderr?: (line: string) => void;
   onExit: (code: number | null, signal: string | null) => void;
@@ -50,6 +52,7 @@ export class PiSession {
   constructor(opts: PiSessionOptions) {
     this.opts = opts;
     this.cwd = opts.cwd;
+    this.version = opts.version ?? "";
   }
 
   get isAlive(): boolean {
