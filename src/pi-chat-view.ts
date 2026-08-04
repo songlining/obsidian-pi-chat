@@ -61,6 +61,7 @@ export class PiChatView extends ItemView {
   private unsubNotif: (() => void) | null = null;
   private scrollPinned = true;
   private suppressScroll = false;
+  private lastTabTitle = "";
 
   constructor(leaf: WorkspaceLeaf, plugin: PiChatPlugin) {
     super(leaf);
@@ -226,7 +227,10 @@ export class PiChatView extends ItemView {
       this.sendBtn.onClick(() => this.sendCurrentInput());
     });
 
-    this.messagesEl.createDiv({ cls: "pi-chat-welcome", text: "Pi Chat — your local coding agent." });
+    this.messagesEl.createDiv({
+      cls: "pi-chat-welcome",
+      text: "Start typing to begin a new session, or pick an existing session from the picker (bottom-right).",
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -234,21 +238,23 @@ export class PiChatView extends ItemView {
   // -------------------------------------------------------------------------
 
   private render(state: UiState): void {
-    // Header
+    // Header + tab title (tab names come from the Rename button)
     const title = state.sessionName || "Pi Chat";
     if (this.headerTitleEl.getText() !== title) this.headerTitleEl.setText(title);
     if (this.headerTitleEl.getAttribute("data-name") !== state.sessionName) {
       this.headerTitleEl.setAttribute("data-name", state.sessionName ?? "");
     }
+    // Refresh the visible tab label whenever the session name changes.
+    if (this.lastTabTitle !== title) {
+      this.lastTabTitle = title;
+      (this.leaf as unknown as { updateHeader?: () => void }).updateHeader?.();
+    }
 
     this.modelChipEl.setText(state.model ? `${state.model.provider}/${state.model.name}` : "model…");
     this.thinkingChipEl.setText(state.thinkingLevel ? `thinking: ${state.thinkingLevel}` : "thinking…");
 
-    // Session picker (bottom-right)
-    const fileLabel = state.sessionFile
-      ? state.sessionFile.split("/").pop()!.replace(/\.jsonl$/, "").replace(/^(\d{4}-\d{2}-\d{2})T(\d{2})-\d{2}.*/, "$1 $2")
-      : "";
-    this.sessionPickerLabel.setText(state.sessionName || fileLabel || "session");
+    // Session picker (bottom-right) — show the session's tab name.
+    this.sessionPickerLabel.setText(state.sessionName || "Unnamed");
     this.sessionPickerEl.setAttribute("title", state.sessionFile || "");
 
     // Status strip
@@ -292,6 +298,12 @@ export class PiChatView extends ItemView {
 
   private renderMessages(state: UiState): void {
     const seen = new Set<string>();
+
+    // The welcome hint only belongs on a genuinely empty (fresh) session.
+    const welcome = this.messagesEl.querySelector(".pi-chat-welcome");
+    if (state.messages.length > 0) {
+      welcome?.remove();
+    }
 
     // Keep scroll pinned only when we were already near the bottom and are
     // streaming; otherwise let the user read without yanking.
@@ -365,7 +377,10 @@ export class PiChatView extends ItemView {
     this.conversation = conv;
     this.messagesEl.empty();
     this.messageEls.clear();
-    this.messagesEl.createDiv({ cls: "pi-chat-welcome", text: "Pi Chat — your local coding agent." });
+    this.messagesEl.createDiv({
+      cls: "pi-chat-welcome",
+      text: "Start typing to begin a new session, or pick an existing session from the picker (bottom-right).",
+    });
     this.unsubscribe = conv.subscribe((s) => this.render(s));
     this.unsubNotif = conv.onUiNotification((req) => this.handleUiNotification(req));
     void conv.loadHistory().catch(() => undefined);
@@ -772,12 +787,11 @@ function toolIconFor(name: string): string {
   }
 }
 
-/** Compact label for the session picker menu. */
-function sessionMenuLabel(s: { name?: string; firstUserMessage?: string; id: string; mtime: number }): string {
-  let label = s.name && s.name.length > 0 ? s.name : s.firstUserMessage ?? "";
-  label = label.replace(/\s+/g, " ").trim();
-  if (label.length > 52) label = label.slice(0, 49) + "…";
-  if (!label) label = s.id.slice(0, 12);
+/** Compact label for the session picker menu: the session's tab name.
+ *  Tab names come from the Rename button (pi's session_info name). Unnamed
+ *  sessions show a clean placeholder instead of raw message content. */
+function sessionMenuLabel(s: { name?: string; id: string; mtime: number }): string {
+  const label = s.name && s.name.length > 0 ? s.name : "Unnamed session";
   const date = new Date(s.mtime).toLocaleDateString();
   return `${label}  ·  ${date}`;
 }
