@@ -204,9 +204,10 @@ export class PiChatView extends ItemView {
 
     root.createDiv({ cls: "pi-chat-status-bar" }, (bar) => {
       this.statusEl = bar.createDiv({ cls: "pi-chat-status" });
+      const actions = bar.createDiv({ cls: "pi-chat-status-actions" });
 
       // Tab picker (left): shows the tab's session name.
-      this.tabPickerEl = bar.createEl("button", { cls: "pi-chat-tab-picker" });
+      this.tabPickerEl = actions.createEl("button", { cls: "pi-chat-tab-picker" });
       this.tabPickerLabel = this.tabPickerEl.createSpan({ cls: "pi-chat-tab-picker-label" });
       const tabIcon = this.tabPickerEl.createSpan({ cls: "pi-chat-tab-picker-icon" });
       setIcon(tabIcon, "hash");
@@ -216,7 +217,7 @@ export class PiChatView extends ItemView {
       });
 
       // Session picker (right): switch this tab to any saved session.
-      this.sessionPickerEl = bar.createEl("button", { cls: "pi-chat-session-picker" });
+      this.sessionPickerEl = actions.createEl("button", { cls: "pi-chat-session-picker" });
       this.sessionPickerLabel = this.sessionPickerEl.createSpan({
         cls: "pi-chat-session-picker-label",
         text: "Sessions",
