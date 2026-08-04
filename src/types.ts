@@ -39,6 +39,13 @@ export type ThinkingLevel =
   | "xhigh"
   | "max";
 
+export interface SlashCommand {
+  name: string;
+  description: string;
+  source: "extension" | "prompt" | "skill";
+  sourceInfo?: string;
+}
+
 export interface SessionStateData {
   model: Model | null;
   thinkingLevel: ThinkingLevel;
@@ -239,6 +246,10 @@ export interface GetAvailableThinkingLevelsCommand extends RpcCommandBase {
   type: "get_available_thinking_levels";
 }
 
+export interface GetCommandsCommand extends RpcCommandBase {
+  type: "get_commands";
+}
+
 export interface SetSessionNameCommand extends RpcCommandBase {
   type: "set_session_name";
   name: string;
@@ -291,6 +302,7 @@ export type RpcCommand =
   | GetAvailableModelsCommand
   | SetThinkingLevelCommand
   | GetAvailableThinkingLevelsCommand
+  | GetCommandsCommand
   | SetSessionNameCommand
   | ExportHtmlCommand
   | GetSessionStatsCommand

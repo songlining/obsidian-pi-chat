@@ -15,6 +15,7 @@ import type {
   Model,
   RpcEvent,
   SessionStatsData,
+  SlashCommand,
   ThinkingLevel,
 } from "./types";
 
@@ -191,6 +192,12 @@ export class Conversation {
     const levels = (resp.data as { levels: ThinkingLevel[] }).levels ?? [];
     this.dispatch({ type: "thinking_levels_available", levels });
     return levels;
+  }
+
+  /** All available slash commands: extension commands, skills and templates. */
+  async getCommands(): Promise<SlashCommand[]> {
+    const resp = await this.session.send({ type: "get_commands" });
+    return (resp.data as { commands: SlashCommand[] }).commands ?? [];
   }
 
   async setModel(model: Model): Promise<void> {

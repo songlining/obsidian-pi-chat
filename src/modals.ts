@@ -14,8 +14,50 @@ import {
   SuggestModal,
   TextComponent,
 } from "obsidian";
-import type { Model, SessionStatsData, ThinkingLevel } from "./types";
+import type { Model, SessionStatsData, SlashCommand, ThinkingLevel } from "./types";
 import { sessionDisplayName, sessionSubtitle, type SessionSummary } from "./session-store";
+
+// ---------------------------------------------------------------------------
+// Slash commands (skills, templates, extension commands)
+// ---------------------------------------------------------------------------
+
+export class CommandPickerModal extends FuzzySuggestModal<SlashCommand> {
+  private itemsList: SlashCommand[];
+  private onChoose: (command: SlashCommand) => void;
+
+  constructor(app: App, commands: SlashCommand[], onChoose: (command: SlashCommand) => void) {
+    super(app);
+    this.onChoose = onChoose;
+    this.itemsList = commands;
+    this.setPlaceholder("Type to filter slash commands (skills, templates, extensions)…");
+    this.setInstructions([
+      { command: "↑↓", purpose: "navigate" },
+      { command: "↵", purpose: "insert command" },
+      { command: "esc", purpose: "dismiss" },
+    ]);
+  }
+
+  getItems(): SlashCommand[] {
+    return this.itemsList;
+  }
+
+  getItemText(command: SlashCommand): string {
+    return `${command.name} ${command.description}`;
+  }
+
+  renderSuggestion(match: import("obsidian").FuzzyMatch<SlashCommand>, el: HTMLElement): void {
+    const command = match.item;
+    el.empty();
+    const nameEl = el.createDiv({ cls: "pi-chat-suggestion-name" });
+    nameEl.setText(`/${command.name}`);
+    const subEl = el.createDiv({ cls: "pi-chat-suggestion-sub" });
+    subEl.setText(`${command.source}${command.description ? ` — ${command.description}` : ""}`);
+  }
+
+  onChooseItem(command: SlashCommand, _evt: MouseEvent | KeyboardEvent): void {
+    this.onChoose(command);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Resume session

@@ -22,6 +22,7 @@ import type { UiMessage, UiState, ToolCallUi } from "./reducer";
 import { contentBlocksToParts, toolArgsSummary } from "./reducer";
 import type { ExtensionUiRequest, ThinkingLevel } from "./types";
 import {
+  CommandPickerModal,
   ModelSwitcherModal,
   RenameSessionModal,
   ResumeSessionModal,
@@ -262,12 +263,21 @@ export class PiChatView extends ItemView {
     root.createDiv({ cls: "pi-chat-input-bar" }, (bar) => {
       this.inputEl = bar.createEl("textarea", {
         cls: "pi-chat-input",
-        attr: { placeholder: "Message Pi… (Enter to send, Shift+Enter for newline)", rows: "2" },
+        attr: { placeholder: "Message Pi… (Enter to send, / for commands, Shift+Enter for newline)", rows: "2" },
       });
       this.inputEl.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           this.sendCurrentInput();
+        } else if (e.key === "/") {
+          // Type "/" at the start of a message (or after whitespace) to
+          // browse slash commands (skills, templates, extension commands).
+          // keydown fires before the character lands, so check the value
+          // that will precede it.
+          const value = this.inputEl.value;
+          if (value.length === 0 || /\s$/.test(value)) {
+            void this.openCommandPicker();
+          }
         }
       });
       this.sendBtn = new ButtonComponent(bar).setButtonText("Send").setCta();
@@ -681,6 +691,29 @@ export class PiChatView extends ItemView {
     this.inputEl.value = "";
     this.inputEl.style.height = "auto";
     void conv.prompt(text);
+  }
+
+  /** Open the slash-command picker; insert the chosen command into the input. */
+  private async openCommandPicker(): Promise<void> {
+    const conv = this.conversation;
+    if (!conv) return;
+    let commands: import("./types").SlashCommand[] = [];
+    try {
+      commands = await conv.getCommands();
+    } catch {
+      return; // session not ready yet
+    }
+    if (commands.length === 0) return;
+    new CommandPickerModal(this.app, commands, (command) => {
+      // Replace the trailing "/" (and any partial command the user typed in
+      // the modal's own search box) with the full chosen command.
+      const value = this.inputEl.value;
+      const slashIdx = value.lastIndexOf("/");
+      this.inputEl.value =
+        (slashIdx >= 0 ? value.slice(0, slashIdx + 1) : value) + command.name;
+      this.inputEl.focus();
+      this.inputEl.setSelectionRange(this.inputEl.value.length, this.inputEl.value.length);
+    }).open();
   }
 
   private async openModelSwitcher(): Promise<void> {
