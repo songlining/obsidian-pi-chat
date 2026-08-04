@@ -762,48 +762,52 @@ export class PiChatView extends ItemView {
     this.nameInputEl.blur();
   }
 
-  /** Bottom-right tab picker: switch tabs and manage the current tab. */
+  /** Bottom-right tab picker: switch tabs, open new ones, manage the current. */
   private showTabMenu(anchor: HTMLElement, evt?: MouseEvent): void {
     const conv = this.conversation;
     if (!conv) return;
     const menu = new Menu();
 
-    // Other open Pi Chat tabs — clicking one makes it active (its session
-    // then becomes the checked one in the Sessions picker).
-    const others = this.app.workspace
-      .getLeavesOfType("pi-chat")
-      .filter((l) => l.view !== this);
-    for (const leaf of others) {
+    // Every open Pi Chat tab (current checked) — each tab holds its own
+    // session, so switching tabs switches tasks.
+    const tabs = this.app.workspace.getLeavesOfType("pi-chat");
+    for (const leaf of tabs) {
       const v = leaf.view as PiChatView;
+      const isCurrent = leaf.view === this;
       const name = v.conversation?.state.sessionName || "Unnamed";
-      menu.addItem((item) =>
-        item
-          .setSection("tabs")
-          .setTitle(name)
-          .setIcon("file-text")
-          .onClick(() => this.app.workspace.setActiveLeaf(leaf, { focus: true })),
-      );
+      menu.addItem((item) => {
+        item.setTitle(name).setIcon("file-text");
+        if (isCurrent) item.setChecked(true);
+        item.onClick(() => this.app.workspace.setActiveLeaf(leaf, { focus: true }));
+        return item;
+      });
     }
-    if (others.length > 0) menu.addSeparator();
+    menu.addSeparator();
+
+    // New tab with a fresh session — start a second task in parallel.
+    menu.addItem((item) =>
+      item
+        .setTitle("New tab")
+        .setIcon("plus")
+        .onClick(() => void this.plugin.openNewTab()),
+    );
+    menu.addSeparator();
 
     menu.addItem((item) =>
       item
-        .setSection("actions")
         .setTitle("Rename session…")
         .setIcon("pencil")
         .onClick(() => this.showRename()),
     );
     menu.addItem((item) =>
       item
-        .setSection("actions")
         .setTitle("New chat in this tab")
-        .setIcon("plus")
+        .setIcon("sparkles")
         .onClick(() => void conv.newSession()),
     );
     if (conv.sessionFile) {
       menu.addItem((item) =>
         item
-          .setSection("actions")
           .setTitle("Copy session file path")
           .setIcon("copy")
           .onClick(() => void navigator.clipboard.writeText(conv.sessionFile ?? "")),

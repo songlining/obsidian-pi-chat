@@ -203,6 +203,21 @@ export default class PiChatPlugin extends Plugin {
     await this.openLeaf({});
   }
 
+  /** Open a brand-new tab with a fresh session (multitasking). */
+  async openNewTab(): Promise<void> {
+    await this.ensurePiEnv();
+    const leaf = this.app.workspace.getLeaf("tab");
+    if (!leaf) return;
+    await leaf.setViewState({
+      type: VIEW_TYPE_PI_CHAT,
+      active: true,
+      state: {
+        sessionKey: `conv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      },
+    });
+    this.app.workspace.revealLeaf(leaf);
+  }
+
   async openContinueLast(): Promise<void> {
     await this.ensurePiEnv();
     await this.openLeaf({ sessionArg: ["-c"] });
