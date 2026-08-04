@@ -49,6 +49,8 @@ export class PiChatView extends ItemView {
   private statusEl!: HTMLElement;
   private sessionPickerEl!: HTMLButtonElement;
   private sessionPickerLabel!: HTMLElement;
+  private tabPickerEl!: HTMLButtonElement;
+  private tabPickerLabel!: HTMLElement;
   private inputEl!: HTMLTextAreaElement;
   private sendBtn!: ButtonComponent;
   private headerTitleEl!: HTMLElement;
@@ -202,8 +204,23 @@ export class PiChatView extends ItemView {
 
     root.createDiv({ cls: "pi-chat-status-bar" }, (bar) => {
       this.statusEl = bar.createDiv({ cls: "pi-chat-status" });
+
+      // Tab picker (left): shows the tab's session name.
+      this.tabPickerEl = bar.createEl("button", { cls: "pi-chat-tab-picker" });
+      this.tabPickerLabel = this.tabPickerEl.createSpan({ cls: "pi-chat-tab-picker-label" });
+      const tabIcon = this.tabPickerEl.createSpan({ cls: "pi-chat-tab-picker-icon" });
+      setIcon(tabIcon, "hash");
+      this.tabPickerEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        void this.showTabMenu(this.tabPickerEl, e);
+      });
+
+      // Session picker (right): switch this tab to any saved session.
       this.sessionPickerEl = bar.createEl("button", { cls: "pi-chat-session-picker" });
-      this.sessionPickerLabel = this.sessionPickerEl.createSpan({ cls: "pi-chat-session-picker-label" });
+      this.sessionPickerLabel = this.sessionPickerEl.createSpan({
+        cls: "pi-chat-session-picker-label",
+        text: "Sessions",
+      });
       const iconSpan = this.sessionPickerEl.createSpan({ cls: "pi-chat-session-picker-icon" });
       setIcon(iconSpan, "chevron-down");
       this.sessionPickerEl.addEventListener("click", (e) => {
@@ -249,7 +266,7 @@ export class PiChatView extends ItemView {
 
     this.messagesEl.createDiv({
       cls: "pi-chat-welcome",
-      text: "Start typing to begin a new session, or pick an existing session from the picker (bottom-right).",
+      text: "Start typing to begin a new session, or pick an existing session from the Sessions picker (bottom-right).",
     });
   }
 
@@ -273,9 +290,9 @@ export class PiChatView extends ItemView {
     this.modelChipEl.setText(state.model ? `${state.model.provider}/${state.model.name}` : "model…");
     this.thinkingChipEl.setText(state.thinkingLevel ? `thinking: ${state.thinkingLevel}` : "thinking…");
 
-    // Session picker (bottom-right) — show the session's tab name.
-    this.sessionPickerLabel.setText(state.sessionName || "Unnamed");
-    this.sessionPickerEl.setAttribute("title", state.sessionFile || "");
+    // Tab picker (bottom-right, left): the tab's session name.
+    this.tabPickerLabel.setText(state.sessionName || "Unnamed");
+    this.tabPickerEl.setAttribute("title", state.sessionFile || "");
 
     // Rename box: keep in sync unless the user is mid-edit.
     if (document.activeElement !== this.nameInputEl) {
@@ -404,7 +421,7 @@ export class PiChatView extends ItemView {
     this.messageEls.clear();
     this.messagesEl.createDiv({
       cls: "pi-chat-welcome",
-      text: "Start typing to begin a new session, or pick an existing session from the picker (bottom-right).",
+      text: "Start typing to begin a new session, or pick an existing session from the Sessions picker (bottom-right).",
     });
     this.unsubscribe = conv.subscribe((s) => this.render(s));
     this.unsubNotif = conv.onUiNotification((req) => this.handleUiNotification(req));
@@ -689,6 +706,61 @@ export class PiChatView extends ItemView {
   private revertNameInput(): void {
     if (this.conversation) this.nameInputEl.value = this.conversation.state.sessionName || "";
     this.nameInputEl.blur();
+  }
+
+  /** Bottom-right tab picker: switch tabs and manage the current tab. */
+  private showTabMenu(anchor: HTMLElement, evt?: MouseEvent): void {
+    const conv = this.conversation;
+    if (!conv) return;
+    const menu = new Menu();
+
+    // Other open Pi Chat tabs — clicking one makes it active (its session
+    // then becomes the checked one in the Sessions picker).
+    const others = this.app.workspace
+      .getLeavesOfType("pi-chat")
+      .filter((l) => l.view !== this);
+    for (const leaf of others) {
+      const v = leaf.view as PiChatView;
+      const name = v.conversation?.state.sessionName || "Unnamed";
+      menu.addItem((item) =>
+        item
+          .setSection("tabs")
+          .setTitle(name)
+          .setIcon("file-text")
+          .onClick(() => this.app.workspace.setActiveLeaf(leaf, { focus: true })),
+      );
+    }
+    if (others.length > 0) menu.addSeparator();
+
+    menu.addItem((item) =>
+      item
+        .setSection("actions")
+        .setTitle("Rename session…")
+        .setIcon("pencil")
+        .onClick(() => this.showRename()),
+    );
+    menu.addItem((item) =>
+      item
+        .setSection("actions")
+        .setTitle("New chat in this tab")
+        .setIcon("plus")
+        .onClick(() => void conv.newSession()),
+    );
+    if (conv.sessionFile) {
+      menu.addItem((item) =>
+        item
+          .setSection("actions")
+          .setTitle("Copy session file path")
+          .setIcon("copy")
+          .onClick(() => void navigator.clipboard.writeText(conv.sessionFile ?? "")),
+      );
+    }
+    if (evt) {
+      menu.showAtMouseEvent(evt);
+    } else {
+      const rect = anchor.getBoundingClientRect();
+      menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
+    }
   }
 
   /** Bottom-right session picker: jump the current tab to any saved session. */
