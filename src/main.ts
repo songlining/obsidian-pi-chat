@@ -232,6 +232,11 @@ export default class PiChatPlugin extends Plugin {
     return this.app.vault.getRoot().path ?? "/";
   }
 
+  /** List this vault's Pi sessions (newest first), for resume and the picker. */
+  async listVaultSessions(): Promise<Awaited<ReturnType<typeof listSessions>>> {
+    return listSessions(this.getVaultPath());
+  }
+
   /**
    * Pi's context-file discovery loads at most ONE file per directory and
    * prefers AGENTS.md over CLAUDE.md. When a vault has both at its root, the

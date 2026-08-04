@@ -293,13 +293,53 @@
   margin-top: 6px;
 }
 
-/* Status strip */
-.pi-chat-status {
+/* Status strip + session picker (bottom-right) */
+.pi-chat-status-bar {
   flex: 0 0 auto;
-  min-height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 2px 12px;
+}
+
+.pi-chat-status {
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pi-chat-session-picker {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.pi-chat-session-picker:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.pi-chat-session-picker-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pi-chat-session-picker-icon {
+  flex: 0 0 auto;
+  display: flex;
 }
 
 /* Input */

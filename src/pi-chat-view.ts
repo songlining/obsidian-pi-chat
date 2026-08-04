@@ -24,6 +24,7 @@ import type { ExtensionUiRequest, ThinkingLevel } from "./types";
 import {
   ModelSwitcherModal,
   RenameSessionModal,
+  ResumeSessionModal,
   SessionInfoModal,
   ThinkingLevelModal,
 } from "./modals";
@@ -45,6 +46,8 @@ export class PiChatView extends ItemView {
   private headerEl!: HTMLElement;
   private messagesEl!: HTMLElement;
   private statusEl!: HTMLElement;
+  private sessionPickerEl!: HTMLButtonElement;
+  private sessionPickerLabel!: HTMLElement;
   private inputEl!: HTMLTextAreaElement;
   private sendBtn!: ButtonComponent;
   private headerTitleEl!: HTMLElement;
@@ -195,8 +198,16 @@ export class PiChatView extends ItemView {
       });
     });
 
-    root.createDiv({ cls: "pi-chat-status" }, (status) => {
-      this.statusEl = status;
+    root.createDiv({ cls: "pi-chat-status-bar" }, (bar) => {
+      this.statusEl = bar.createDiv({ cls: "pi-chat-status" });
+      this.sessionPickerEl = bar.createEl("button", { cls: "pi-chat-session-picker" });
+      this.sessionPickerLabel = this.sessionPickerEl.createSpan({ cls: "pi-chat-session-picker-label" });
+      const iconSpan = this.sessionPickerEl.createSpan({ cls: "pi-chat-session-picker-icon" });
+      setIcon(iconSpan, "chevron-down");
+      this.sessionPickerEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        void this.showSessionMenu(this.sessionPickerEl, e);
+      });
     });
 
     root.createDiv({ cls: "pi-chat-input-bar" }, (bar) => {
@@ -232,6 +243,13 @@ export class PiChatView extends ItemView {
 
     this.modelChipEl.setText(state.model ? `${state.model.provider}/${state.model.name}` : "model…");
     this.thinkingChipEl.setText(state.thinkingLevel ? `thinking: ${state.thinkingLevel}` : "thinking…");
+
+    // Session picker (bottom-right)
+    const fileLabel = state.sessionFile
+      ? state.sessionFile.split("/").pop()!.replace(/\.jsonl$/, "").replace(/^(\d{4}-\d{2}-\d{2})T(\d{2})-\d{2}.*/, "$1 $2")
+      : "";
+    this.sessionPickerLabel.setText(state.sessionName || fileLabel || "session");
+    this.sessionPickerEl.setAttribute("title", state.sessionFile || "");
 
     // Status strip
     this.renderStatus(state);
@@ -617,6 +635,52 @@ export class PiChatView extends ItemView {
     new RenameSessionModal(this.app, conv.state.sessionName ?? "", (name) => void conv.rename(name)).open();
   }
 
+  /** Bottom-right session picker: jump the current tab to any saved session. */
+  private async showSessionMenu(anchor: HTMLElement, evt: MouseEvent): Promise<void> {
+    const conv = this.conversation;
+    if (!conv) return;
+    const sessions = await this.plugin.listVaultSessions();
+    const menu = new Menu();
+
+    const currentFile = conv.sessionFile;
+    const shown = sessions.slice(0, 12);
+    for (const s of shown) {
+      const label = sessionMenuLabel(s);
+      const active = s.file === currentFile;
+      menu.addItem((item) => {
+        item.setTitle(label);
+        if (active) item.setChecked(true);
+        item.onClick(() => void conv.switchSession(s.file));
+        return item;
+      });
+    }
+
+    menu.addItem((item) =>
+      item
+        .setSection("more")
+        .setTitle("Browse all sessions…")
+        .setIcon("search")
+        .onClick(() => {
+          const modal = new ResumeSessionModal(this.app, sessions, (s) => void conv.switchSession(s.file));
+          modal.open();
+        }),
+    );
+    menu.addItem((item) =>
+      item
+        .setSection("more")
+        .setTitle("New chat in this tab")
+        .setIcon("plus")
+        .onClick(() => void conv.newSession()),
+    );
+
+    if (evt) {
+      menu.showAtMouseEvent(evt);
+    } else {
+      const rect = anchor.getBoundingClientRect();
+      menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
+    }
+  }
+
   private showMenu(anchor: HTMLElement, evt?: MouseEvent): void {
     const conv = this.conversation;
     if (!conv) return;
@@ -706,6 +770,16 @@ function toolIconFor(name: string): string {
     default:
       return "wrench";
   }
+}
+
+/** Compact label for the session picker menu. */
+function sessionMenuLabel(s: { name?: string; firstUserMessage?: string; id: string; mtime: number }): string {
+  let label = s.name && s.name.length > 0 ? s.name : s.firstUserMessage ?? "";
+  label = label.replace(/\s+/g, " ").trim();
+  if (label.length > 52) label = label.slice(0, 49) + "…";
+  if (!label) label = s.id.slice(0, 12);
+  const date = new Date(s.mtime).toLocaleDateString();
+  return `${label}  ·  ${date}`;
 }
 
 function statusTextFor(status: ToolCallUi["status"]): string {

@@ -262,12 +262,40 @@ export class Conversation {
     }
   }
 
+  /** Jump the current tab to a different session file (pi loads it in place). */
+  async switchSession(sessionPath: string): Promise<void> {
+    try {
+      const prevName = this.state.sessionName;
+      const resp = await this.session.send({ type: "switch_session", sessionPath });
+      const cancelled = (resp.data as { cancelled?: boolean } | undefined)?.cancelled ?? false;
+      if (cancelled) return;
+      // The session switched underneath us: clear the panel, then repopulate
+      // from the new session's state and history.
+      this.state = {
+        ...initialState(),
+        phase: "ready",
+        stderr: this.state.stderr,
+      };
+      this.emit();
+      this.sessionFile = sessionPath;
+      this.callbacks.onSessionFile?.(sessionPath);
+      void this.refreshState();
+      void this.loadHistory();
+      if (prevName) this.pushSystem(`Switched away from "${prevName}".`);
+    } catch (err) {
+      this.pushError(`Failed to switch session: ${(err as Error).message}`);
+    }
+  }
+
   async newSession(): Promise<void> {
     try {
+      const prevName = this.state.sessionName;
+      const prevFile = this.sessionFile;
       const resp = await this.session.send({ type: "new_session" });
       const cancelled = (resp.data as { cancelled?: boolean } | undefined)?.cancelled ?? false;
       if (!cancelled) {
-        // The session restarted underneath us: clear the panel.
+        // The session restarted underneath us: clear the panel. The previous
+        // session stays on disk (sessions are Pi's) and is resumable.
         this.state = {
           ...initialState(),
           phase: "ready",
@@ -276,6 +304,13 @@ export class Conversation {
         this.emit();
         void this.refreshState();
         void this.loadHistory();
+        const prevLabel =
+          prevName || (prevFile ? prevFile.slice(prevFile.lastIndexOf("/") + 1) : undefined);
+        this.pushSystem(
+          prevLabel
+            ? `Started a new session. "${prevLabel}" was saved — use the “Pi Chat: Resume session” command to return to it.`
+            : "Started a new session.",
+        );
       }
     } catch (err) {
       this.pushError(`Failed to start new session: ${(err as Error).message}`);
@@ -319,6 +354,18 @@ export class Conversation {
       messages: [
         ...this.state.messages,
         { key: `e${this.state.seq + 1}`, kind: "error", text: message },
+      ],
+      seq: this.state.seq + 1,
+    };
+    this.emit();
+  }
+
+  private pushSystem(message: string): void {
+    this.state = {
+      ...this.state,
+      messages: [
+        ...this.state.messages,
+        { key: `s${this.state.seq + 1}`, kind: "system", text: message },
       ],
       seq: this.state.seq + 1,
     };
