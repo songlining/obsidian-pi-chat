@@ -191,25 +191,6 @@ export class PiChatView extends ItemView {
       });
     });
 
-    // Rename box: just above the message window.
-    root.createDiv({ cls: "pi-chat-name-bar" }, (bar) => {
-      this.nameInputEl = bar.createEl("input", {
-        cls: "pi-chat-name-input",
-        attr: { placeholder: "Session name — click to rename", spellcheck: "false" },
-      });
-      const icon = bar.createSpan({ cls: "pi-chat-name-icon" });
-      setIcon(icon, "pencil");
-      this.nameInputEl.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          this.applyRenameFromInput();
-        } else if (e.key === "Escape") {
-          this.revertNameInput();
-        }
-      });
-      this.nameInputEl.addEventListener("blur", () => this.applyRenameFromInput());
-    });
-
     root.createDiv({ cls: "pi-chat-messages" }, (messages) => {
       this.messagesEl = messages;
       messages.addEventListener("scroll", () => {
@@ -229,6 +210,25 @@ export class PiChatView extends ItemView {
         e.stopPropagation();
         void this.showSessionMenu(this.sessionPickerEl, e);
       });
+    });
+
+    // Rename box: bottom-left, just above the message input box.
+    root.createDiv({ cls: "pi-chat-name-bar" }, (bar) => {
+      const icon = bar.createSpan({ cls: "pi-chat-name-icon" });
+      setIcon(icon, "pencil");
+      this.nameInputEl = bar.createEl("input", {
+        cls: "pi-chat-name-input",
+        attr: { placeholder: "Session name — click to rename", spellcheck: "false" },
+      });
+      this.nameInputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          this.applyRenameFromInput();
+        } else if (e.key === "Escape") {
+          this.revertNameInput();
+        }
+      });
+      this.nameInputEl.addEventListener("blur", () => this.applyRenameFromInput());
     });
 
     root.createDiv({ cls: "pi-chat-input-bar" }, (bar) => {

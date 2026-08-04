@@ -67,18 +67,19 @@
   background: var(--background-modifier-hover);
 }
 
-/* Rename box: just above the message window */
+/* Rename box: bottom-left, just above the message input box */
 .pi-chat-name-bar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 6px;
-  padding: 4px 12px 0;
+  padding: 2px 12px 0;
 }
 
 .pi-chat-name-input {
-  flex: 1;
-  min-width: 0;
+  flex: 0 1 280px;
+  min-width: 80px;
   background: none;
   border: none;
   border-bottom: 1px solid transparent;
