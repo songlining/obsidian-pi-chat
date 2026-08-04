@@ -53,6 +53,7 @@ export class PiChatView extends ItemView {
   private tabPickerLabel!: HTMLElement;
   private inputEl!: HTMLTextAreaElement;
   private sendBtn!: ButtonComponent;
+  private stopBtn!: ButtonComponent;
   private headerTitleEl!: HTMLElement;
   private modelChipEl!: HTMLElement;
   private thinkingChipEl!: HTMLElement;
@@ -176,6 +177,16 @@ export class PiChatView extends ItemView {
     const root = this.contentEl;
     root.empty();
     root.addClass("pi-chat-root");
+    // Escape aborts a running agent turn from anywhere in the view.
+    root.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const conv = this.conversation;
+      if (conv && conv.state.isRunning) {
+        e.preventDefault();
+        e.stopPropagation();
+        conv.abort();
+      }
+    });
     root.createDiv({ cls: "pi-chat-header" }, (header) => {
       this.headerEl = header;
       this.headerTitleEl = header.createDiv({ cls: "pi-chat-header-title", text: "Pi Chat" });
@@ -262,6 +273,13 @@ export class PiChatView extends ItemView {
       this.sendBtn = new ButtonComponent(bar).setButtonText("Send").setCta();
       this.sendBtn.buttonEl.addClass("pi-chat-send-btn");
       this.sendBtn.onClick(() => this.sendCurrentInput());
+
+      // Stop button: visible only while the agent is running.
+      this.stopBtn = new ButtonComponent(bar).setButtonText("Stop").setWarning();
+      this.stopBtn.buttonEl.addClass("pi-chat-stop-btn");
+      this.stopBtn.buttonEl.setAttribute("title", "Abort (Esc)");
+      this.stopBtn.onClick(() => void this.conversation?.abort());
+      this.stopBtn.buttonEl.hide();
     });
 
     this.messagesEl.createDiv({
@@ -275,6 +293,9 @@ export class PiChatView extends ItemView {
   // -------------------------------------------------------------------------
 
   private render(state: UiState): void {
+    // Stop button shows only while the agent is running.
+    this.stopBtn.buttonEl.style.cssText = state.isRunning ? "" : "display: none";
+
     // Header + tab title (tab names come from the Rename button)
     const title = state.sessionName || "Pi Chat";
     if (this.headerTitleEl.getText() !== title) this.headerTitleEl.setText(title);
