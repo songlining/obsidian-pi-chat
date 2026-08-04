@@ -12,6 +12,7 @@ import { PiSession, type PiSessionOptions } from "./pi-session";
 import type {
   AgentMessage,
   ExtensionUiRequest,
+  ImageContent,
   Model,
   RpcEvent,
   SessionStatsData,
@@ -325,13 +326,14 @@ export class Conversation {
   }
 
   /** Queue a steering message while running, or a plain prompt when idle. */
-  async prompt(text: string): Promise<void> {
+  async prompt(text: string, images?: ImageContent[]): Promise<void> {
     const streaming = this.state.isRunning || this.state.isStreaming;
-    this.dispatch({ type: "user_message", text });
+    this.dispatch({ type: "user_message", text, images });
     try {
       await this.session.send({
         type: "prompt",
         message: text,
+        images,
         streamingBehavior: streaming ? "steer" : undefined,
       });
     } catch (err) {

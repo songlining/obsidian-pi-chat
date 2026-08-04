@@ -429,6 +429,60 @@
   display: flex;
 }
 
+/* Pasted-image previews above the composer */
+.pi-chat-preview-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 12px 0;
+}
+
+.pi-chat-preview {
+  position: relative;
+  display: inline-block;
+}
+
+.pi-chat-preview-img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.pi-chat-preview-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--background-modifier-error);
+  color: var(--text-on-accent);
+  cursor: pointer;
+  border: none;
+}
+
+/* Pasted images inside a user message */
+.pi-chat-msg-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.pi-chat-msg-image {
+  max-width: 180px;
+  max-height: 140px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+}
+
 /* Input */
 .pi-chat-input-bar {
   flex: 0 0 auto;

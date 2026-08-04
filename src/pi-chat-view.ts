@@ -20,7 +20,7 @@ import type PiChatPlugin from "./main";
 import type { Conversation } from "./conversation";
 import type { UiMessage, UiState, ToolCallUi } from "./reducer";
 import { contentBlocksToParts, toolArgsSummary } from "./reducer";
-import type { ExtensionUiRequest, ThinkingLevel } from "./types";
+import type { ExtensionUiRequest, ImageContent, ThinkingLevel } from "./types";
 import {
   CommandPickerModal,
   ModelSwitcherModal,
@@ -53,6 +53,9 @@ export class PiChatView extends ItemView {
   private inputEl!: HTMLTextAreaElement;
   private sendBtn!: ButtonComponent;
   private stopBtn!: ButtonComponent;
+  private previewBarEl!: HTMLElement;
+  /** Pasted images awaiting send. */
+  private pastedImages: ImageContent[] = [];
   private headerTitleEl!: HTMLElement;
   private modelChipEl!: HTMLElement;
   private thinkingChipEl!: HTMLElement;
@@ -247,6 +250,11 @@ export class PiChatView extends ItemView {
       });
     });
 
+    root.createDiv({ cls: "pi-chat-preview-bar" }, (bar) => {
+      this.previewBarEl = bar;
+      bar.hide();
+    });
+
     root.createDiv({ cls: "pi-chat-input-bar" }, (bar) => {
       this.inputEl = bar.createEl("textarea", {
         cls: "pi-chat-input",
@@ -265,6 +273,34 @@ export class PiChatView extends ItemView {
           if (value.length === 0 || /\s$/.test(value)) {
             void this.openCommandPicker();
           }
+        }
+      });
+
+      // Paste support: image files from the clipboard become attachments.
+      this.inputEl.addEventListener("paste", (e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        const imageItems = Array.from(items).filter((i) => i.type.startsWith("image/"));
+        if (imageItems.length === 0) return;
+        e.preventDefault();
+        for (const item of imageItems) {
+          const file = item.getAsFile();
+          if (!file) continue;
+          if (this.pastedImages.length >= 4) {
+            new Notice("Max 4 images per message.");
+            break;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            const data = String(reader.result).split(",")[1] ?? "";
+            if (!data) return;
+            this.pastedImages = [
+              ...this.pastedImages,
+              { type: "image", data, mimeType: file.type || "image/png" },
+            ];
+            this.renderPastedImages();
+          };
+          reader.readAsDataURL(file);
         }
       });
       this.sendBtn = new ButtonComponent(bar).setButtonText("Send").setCta();
@@ -456,6 +492,7 @@ export class PiChatView extends ItemView {
 
     switch (message.kind) {
       case "user":
+        this.renderMessageImages(el, message);
         this.renderMarkdownThrottled(el, message.text, mdKey, message);
         break;
       case "assistant":
@@ -675,9 +712,52 @@ export class PiChatView extends ItemView {
       conv.abort();
       return;
     }
+    const images = this.pastedImages.length > 0 ? this.pastedImages : undefined;
     this.inputEl.value = "";
     this.inputEl.style.height = "auto";
-    void conv.prompt(text);
+    this.pastedImages = [];
+    this.renderPastedImages();
+    void conv.prompt(text, images);
+  }
+
+  /** Rebuild the pasted-image preview strip above the composer. */
+  private renderPastedImages(): void {
+    this.previewBarEl.empty();
+    if (this.pastedImages.length === 0) {
+      this.previewBarEl.hide();
+      return;
+    }
+    this.previewBarEl.show();
+    this.pastedImages.forEach((img, i) => {
+      const wrap = this.previewBarEl.createDiv({ cls: "pi-chat-preview" });
+      const el = wrap.createEl("img", {
+        cls: "pi-chat-preview-img",
+        attr: { src: `data:${img.mimeType};base64,${img.data}` },
+      });
+      const remove = wrap.createEl("button", { cls: "pi-chat-preview-remove" });
+      setIcon(remove, "x");
+      remove.addEventListener("click", () => {
+        this.pastedImages = this.pastedImages.filter((_, idx) => idx !== i);
+        this.renderPastedImages();
+      });
+    });
+  }
+
+  /** Render pasted-image thumbnails inside a user message row. */
+  private renderMessageImages(el: HTMLElement, message: UiMessage): void {
+    if (!message.images || message.images.length === 0) return;
+    let imagesEl = el.querySelector<HTMLElement>(".pi-chat-msg-images");
+    if (!imagesEl) {
+      imagesEl = el.createDiv({ cls: "pi-chat-msg-images" });
+    } else {
+      imagesEl.empty();
+    }
+    for (const img of message.images) {
+      imagesEl.createEl("img", {
+        cls: "pi-chat-msg-image",
+        attr: { src: `data:${img.mimeType};base64,${img.data}` },
+      });
+    }
   }
 
   /** Open the slash-command picker; insert the chosen command into the input. */

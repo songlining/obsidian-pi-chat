@@ -8,6 +8,7 @@ import type {
   AgentMessage,
   AssistantMessage,
   ExtensionUiRequest,
+  ImageContent,
   Model,
   RpcEvent,
   SessionStateData,
@@ -45,6 +46,8 @@ export interface UiMessage {
   text: string;
   /** Accumulated thinking text (assistant messages). */
   thinking?: string;
+  /** Pasted image attachments (user messages). */
+  images?: ImageContent[];
   streaming?: boolean;
   /** Optimistic user message that pi has not yet confirmed. */
   pending?: boolean;
@@ -114,7 +117,7 @@ export function initialState(): UiState {
 
 export type Action =
   | { type: "rpc"; event: RpcEvent }
-  | { type: "user_message"; text: string }
+  | { type: "user_message"; text: string; images?: ImageContent[] }
   | { type: "session_ready"; data: SessionStateData }
   | { type: "models_available"; models: Model[] }
   | { type: "thinking_levels_available"; levels: ThinkingLevel[] }
@@ -182,6 +185,12 @@ function userText(msg: UserMessage): string {
     .join("\n");
 }
 
+function userImages(msg: UserMessage): ImageContent[] | undefined {
+  if (typeof msg.content === "string") return undefined;
+  const images = msg.content.filter((b): b is ImageContent => b.type === "image");
+  return images.length > 0 ? images : undefined;
+}
+
 function isDialogRequest(req: ExtensionUiRequest): boolean {
   return (
     req.method === "select" ||
@@ -216,6 +225,7 @@ export function reduce(state: UiState, action: Action): UiState {
             key: `u${state.seq + 1}`,
             kind: "user",
             text: action.text,
+            images: action.images,
             pending: true,
             timestamp: Date.now(),
           },
@@ -687,7 +697,7 @@ export function messagesToUi(messages: AgentMessage[]): UiMessage[] {
     switch (m.role) {
       case "user": {
         seq++;
-        out.push({ key: `h${seq}`, kind: "user", text: userText(m), timestamp: m.timestamp });
+        out.push({ key: `h${seq}`, kind: "user", text: userText(m), images: userImages(m), timestamp: m.timestamp });
         break;
       }
       case "assistant": {
