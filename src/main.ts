@@ -33,7 +33,7 @@ export default class PiChatPlugin extends Plugin {
 
     this.registerView(VIEW_TYPE_PI_CHAT, (leaf) => new PiChatView(leaf, this));
 
-    this.addRibbonIcon("bot", "Pi Chat — new conversation", () => void this.openNewChat());
+    this.addRibbonIcon("bot-message-square", "Pi Chat — new conversation", () => void this.openNewChat());
     this.addCommand({
       id: "new-chat",
       name: "Pi Chat: New conversation",

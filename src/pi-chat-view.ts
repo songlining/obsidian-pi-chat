@@ -83,7 +83,7 @@ export class PiChatView extends ItemView {
   }
 
   getIcon(): string {
-    return "bot";
+    return "bot-message-square";
   }
 
   getState(): ViewStatePayload {
