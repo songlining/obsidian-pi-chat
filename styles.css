@@ -67,6 +67,47 @@
   background: var(--background-modifier-hover);
 }
 
+/* Rename box: just above the message window */
+.pi-chat-name-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 0;
+}
+
+.pi-chat-name-input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  padding: 2px 4px;
+}
+
+.pi-chat-name-input:hover {
+  border-bottom-color: var(--background-modifier-border);
+}
+
+.pi-chat-name-input:focus {
+  outline: none;
+  border-bottom-color: var(--interactive-accent);
+  color: var(--text-normal);
+}
+
+.pi-chat-name-input::placeholder {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.pi-chat-name-icon {
+  flex: 0 0 auto;
+  display: flex;
+  color: var(--text-faint);
+}
+
 /* Messages */
 .pi-chat-messages {
   flex: 1 1 auto;

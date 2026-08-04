@@ -44,6 +44,7 @@ export class PiChatView extends ItemView {
   conversation: Conversation | null = null;
 
   private headerEl!: HTMLElement;
+  private nameInputEl!: HTMLInputElement;
   private messagesEl!: HTMLElement;
   private statusEl!: HTMLElement;
   private sessionPickerEl!: HTMLButtonElement;
@@ -190,6 +191,25 @@ export class PiChatView extends ItemView {
       });
     });
 
+    // Rename box: just above the message window.
+    root.createDiv({ cls: "pi-chat-name-bar" }, (bar) => {
+      this.nameInputEl = bar.createEl("input", {
+        cls: "pi-chat-name-input",
+        attr: { placeholder: "Session name — click to rename", spellcheck: "false" },
+      });
+      const icon = bar.createSpan({ cls: "pi-chat-name-icon" });
+      setIcon(icon, "pencil");
+      this.nameInputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          this.applyRenameFromInput();
+        } else if (e.key === "Escape") {
+          this.revertNameInput();
+        }
+      });
+      this.nameInputEl.addEventListener("blur", () => this.applyRenameFromInput());
+    });
+
     root.createDiv({ cls: "pi-chat-messages" }, (messages) => {
       this.messagesEl = messages;
       messages.addEventListener("scroll", () => {
@@ -256,6 +276,11 @@ export class PiChatView extends ItemView {
     // Session picker (bottom-right) — show the session's tab name.
     this.sessionPickerLabel.setText(state.sessionName || "Unnamed");
     this.sessionPickerEl.setAttribute("title", state.sessionFile || "");
+
+    // Rename box: keep in sync unless the user is mid-edit.
+    if (document.activeElement !== this.nameInputEl) {
+      this.nameInputEl.value = state.sessionName || "";
+    }
 
     // Status strip
     this.renderStatus(state);
@@ -648,6 +673,22 @@ export class PiChatView extends ItemView {
     const conv = this.conversation;
     if (!conv) return;
     new RenameSessionModal(this.app, conv.state.sessionName ?? "", (name) => void conv.rename(name)).open();
+  }
+
+  private applyRenameFromInput(): void {
+    const conv = this.conversation;
+    if (!conv) return;
+    const value = this.nameInputEl.value.trim();
+    if (value && value !== conv.state.sessionName) {
+      void conv.rename(value);
+    } else {
+      this.revertNameInput();
+    }
+  }
+
+  private revertNameInput(): void {
+    if (this.conversation) this.nameInputEl.value = this.conversation.state.sessionName || "";
+    this.nameInputEl.blur();
   }
 
   /** Bottom-right session picker: jump the current tab to any saved session. */
