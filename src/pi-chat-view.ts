@@ -48,8 +48,6 @@ export class PiChatView extends ItemView {
   private nameInputEl!: HTMLInputElement;
   private messagesEl!: HTMLElement;
   private statusEl!: HTMLElement;
-  private sessionPickerEl!: HTMLButtonElement;
-  private sessionPickerLabel!: HTMLElement;
   private tabPickerEl!: HTMLButtonElement;
   private tabPickerLabel!: HTMLElement;
   private inputEl!: HTMLTextAreaElement;
@@ -236,7 +234,9 @@ export class PiChatView extends ItemView {
       this.statusEl = bar.createDiv({ cls: "pi-chat-status" });
       const actions = bar.createDiv({ cls: "pi-chat-status-actions" });
 
-      // Tab picker (left): shows the tab's session name.
+      // Tab/session picker (bottom-right): which session this pane shows.
+      // The pane is one leaf; the picker's entries are named sessions that
+      // get switched in place (switch_session) — like Claudian's list.
       this.tabPickerEl = actions.createEl("button", { cls: "pi-chat-tab-picker" });
       this.tabPickerLabel = this.tabPickerEl.createSpan({ cls: "pi-chat-tab-picker-label" });
       const tabIcon = this.tabPickerEl.createSpan({ cls: "pi-chat-tab-picker-icon" });
@@ -244,19 +244,6 @@ export class PiChatView extends ItemView {
       this.tabPickerEl.addEventListener("click", (e) => {
         e.stopPropagation();
         void this.showTabMenu(this.tabPickerEl, e);
-      });
-
-      // Session picker (right): switch this tab to any saved session.
-      this.sessionPickerEl = actions.createEl("button", { cls: "pi-chat-session-picker" });
-      this.sessionPickerLabel = this.sessionPickerEl.createSpan({
-        cls: "pi-chat-session-picker-label",
-        text: "Sessions",
-      });
-      const iconSpan = this.sessionPickerEl.createSpan({ cls: "pi-chat-session-picker-icon" });
-      setIcon(iconSpan, "chevron-down");
-      this.sessionPickerEl.addEventListener("click", (e) => {
-        e.stopPropagation();
-        void this.showSessionMenu(this.sessionPickerEl, e);
       });
     });
 
@@ -294,7 +281,7 @@ export class PiChatView extends ItemView {
 
     this.messagesEl.createDiv({
       cls: "pi-chat-welcome",
-      text: "Start typing to begin a new session, or pick an existing session from the Sessions picker (bottom-right).",
+      text: "Start typing to begin a new session, or pick an existing session from the tab picker (bottom-right).",
     });
   }
 
@@ -452,7 +439,7 @@ export class PiChatView extends ItemView {
     this.messageEls.clear();
     this.messagesEl.createDiv({
       cls: "pi-chat-welcome",
-      text: "Start typing to begin a new session, or pick an existing session from the Sessions picker (bottom-right).",
+      text: "Start typing to begin a new session, or pick an existing session from the tab picker (bottom-right).",
     });
     this.unsubscribe = conv.subscribe((s) => this.render(s));
     this.unsubNotif = conv.onUiNotification((req) => this.handleUiNotification(req));
@@ -762,75 +749,17 @@ export class PiChatView extends ItemView {
     this.nameInputEl.blur();
   }
 
-  /** Bottom-right tab picker: switch tabs, open new ones, manage the current. */
-  private showTabMenu(anchor: HTMLElement, evt?: MouseEvent): void {
-    const conv = this.conversation;
-    if (!conv) return;
-    const menu = new Menu();
-
-    // Every open Pi Chat tab (current checked) — each tab holds its own
-    // session, so switching tabs switches tasks.
-    const tabs = this.app.workspace.getLeavesOfType("pi-chat");
-    for (const leaf of tabs) {
-      const v = leaf.view as PiChatView;
-      const isCurrent = leaf.view === this;
-      const name = v.conversation?.state.sessionName || "Unnamed";
-      menu.addItem((item) => {
-        item.setTitle(name).setIcon("file-text");
-        if (isCurrent) item.setChecked(true);
-        item.onClick(() => this.app.workspace.setActiveLeaf(leaf, { focus: true }));
-        return item;
-      });
-    }
-    menu.addSeparator();
-
-    // New tab with a fresh session — start a second task in parallel.
-    menu.addItem((item) =>
-      item
-        .setTitle("New tab")
-        .setIcon("plus")
-        .onClick(() => void this.plugin.openNewTab()),
-    );
-    menu.addSeparator();
-
-    menu.addItem((item) =>
-      item
-        .setTitle("Rename session…")
-        .setIcon("pencil")
-        .onClick(() => this.showRename()),
-    );
-    menu.addItem((item) =>
-      item
-        .setTitle("New chat in this tab")
-        .setIcon("sparkles")
-        .onClick(() => void conv.newSession()),
-    );
-    if (conv.sessionFile) {
-      menu.addItem((item) =>
-        item
-          .setTitle("Copy session file path")
-          .setIcon("copy")
-          .onClick(() => void navigator.clipboard.writeText(conv.sessionFile ?? "")),
-      );
-    }
-    if (evt) {
-      menu.showAtMouseEvent(evt);
-    } else {
-      const rect = anchor.getBoundingClientRect();
-      menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
-    }
-  }
-
-  /** Bottom-right session picker: jump the current tab to any saved session. */
-  private async showSessionMenu(anchor: HTMLElement, evt: MouseEvent): Promise<void> {
+  /** Bottom-right tab picker: the pane's sessions ("tabs"), switched in place. */
+  private async showTabMenu(anchor: HTMLElement, evt?: MouseEvent): Promise<void> {
     const conv = this.conversation;
     if (!conv) return;
     const sessions = await this.plugin.listVaultSessions();
     const menu = new Menu();
-
     const currentFile = conv.sessionFile;
-    const shown = sessions.slice(0, 12);
-    for (const s of shown) {
+
+    // Recent sessions are the "tabs" — picking one displays it in this same
+    // pane (switch_session), no new leaf involved.
+    for (const s of sessions.slice(0, 12)) {
       const label = sessionMenuLabel(s);
       const active = s.file === currentFile;
       menu.addItem((item) => {
@@ -843,22 +772,36 @@ export class PiChatView extends ItemView {
 
     menu.addItem((item) =>
       item
-        .setSection("more")
-        .setTitle("Browse all sessions…")
-        .setIcon("search")
-        .onClick(() => {
-          const modal = new ResumeSessionModal(this.app, sessions, (s) => void conv.switchSession(s.file));
-          modal.open();
-        }),
-    );
-    menu.addItem((item) =>
-      item
-        .setSection("more")
-        .setTitle("New chat in this tab")
+        .setTitle("New session")
         .setIcon("plus")
         .onClick(() => void conv.newSession()),
     );
-
+    menu.addItem((item) =>
+      item
+        .setTitle("Browse all sessions…")
+        .setIcon("search")
+        .onClick(() => {
+          const modal = new ResumeSessionModal(this.app, sessions, (s) =>
+            void conv.switchSession(s.file),
+          );
+          modal.open();
+        }),
+    );
+    menu.addSeparator();
+    menu.addItem((item) =>
+      item
+        .setTitle("Rename session…")
+        .setIcon("pencil")
+        .onClick(() => this.showRename()),
+    );
+    if (conv.sessionFile) {
+      menu.addItem((item) =>
+        item
+          .setTitle("Copy session file path")
+          .setIcon("copy")
+          .onClick(() => void navigator.clipboard.writeText(conv.sessionFile ?? "")),
+      );
+    }
     if (evt) {
       menu.showAtMouseEvent(evt);
     } else {
