@@ -67,25 +67,26 @@
   background: var(--background-modifier-hover);
 }
 
-/* Rename box: bottom-left, just above the message input box */
-.pi-chat-name-bar {
-  flex: 0 0 auto;
+/* Rename box: bottom-left, on the same row as the pickers */
+.pi-chat-status-rename {
+  flex: 0 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
   gap: 6px;
-  padding: 2px 12px 0;
 }
 
 .pi-chat-name-input {
-  flex: 0 1 280px;
-  min-width: 80px;
+  flex: 0 1 220px;
+  min-width: 60px;
+  height: 24px;
+  box-sizing: border-box;
   background: none;
   border: none;
   border-bottom: 1px solid transparent;
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
-  padding: 2px 4px;
+  padding: 0 4px;
 }
 
 .pi-chat-name-input:hover {
@@ -353,6 +354,8 @@
 }
 
 .pi-chat-status {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
   overflow: hidden;
@@ -366,13 +369,15 @@
   align-items: center;
   gap: 4px;
   max-width: 220px;
+  height: 24px;
+  padding: 0 6px;
   background: none;
   border: none;
-  padding: 2px 6px;
   border-radius: 4px;
   cursor: pointer;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
+  box-sizing: border-box;
 }
 
 .pi-chat-tab-picker {
@@ -381,13 +386,15 @@
   align-items: center;
   gap: 4px;
   max-width: 180px;
+  height: 24px;
+  padding: 0 6px;
   background: none;
   border: none;
-  padding: 2px 6px;
   border-radius: 4px;
   cursor: pointer;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
+  box-sizing: border-box;
 }
 
 .pi-chat-tab-picker:hover {

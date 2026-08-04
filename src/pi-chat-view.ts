@@ -203,6 +203,24 @@ export class PiChatView extends ItemView {
     });
 
     root.createDiv({ cls: "pi-chat-status-bar" }, (bar) => {
+      // Rename box: bottom-left, same level as the pickers.
+      const rename = bar.createDiv({ cls: "pi-chat-status-rename" });
+      const icon = rename.createSpan({ cls: "pi-chat-name-icon" });
+      setIcon(icon, "pencil");
+      this.nameInputEl = rename.createEl("input", {
+        cls: "pi-chat-name-input",
+        attr: { placeholder: "Session name — click to rename", spellcheck: "false" },
+      });
+      this.nameInputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          this.applyRenameFromInput();
+        } else if (e.key === "Escape") {
+          this.revertNameInput();
+        }
+      });
+      this.nameInputEl.addEventListener("blur", () => this.applyRenameFromInput());
+
       this.statusEl = bar.createDiv({ cls: "pi-chat-status" });
       const actions = bar.createDiv({ cls: "pi-chat-status-actions" });
 
@@ -228,25 +246,6 @@ export class PiChatView extends ItemView {
         e.stopPropagation();
         void this.showSessionMenu(this.sessionPickerEl, e);
       });
-    });
-
-    // Rename box: bottom-left, just above the message input box.
-    root.createDiv({ cls: "pi-chat-name-bar" }, (bar) => {
-      const icon = bar.createSpan({ cls: "pi-chat-name-icon" });
-      setIcon(icon, "pencil");
-      this.nameInputEl = bar.createEl("input", {
-        cls: "pi-chat-name-input",
-        attr: { placeholder: "Session name — click to rename", spellcheck: "false" },
-      });
-      this.nameInputEl.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          this.applyRenameFromInput();
-        } else if (e.key === "Escape") {
-          this.revertNameInput();
-        }
-      });
-      this.nameInputEl.addEventListener("blur", () => this.applyRenameFromInput());
     });
 
     root.createDiv({ cls: "pi-chat-input-bar" }, (bar) => {
@@ -814,20 +813,8 @@ export class PiChatView extends ItemView {
     const conv = this.conversation;
     if (!conv) return;
     const menu = new Menu();
-    menu.addItem((item) =>
-      item
-        .setTitle("New chat in this tab")
-        .setIcon("plus")
-        .onClick(() => void conv.newSession()),
-    );
-    menu.addItem((item) =>
-      item
-        .setTitle("Rename session…")
-        .setIcon("pencil")
-        .onClick(() => {
-          this.showRename();
-        }),
-    );
+    // The tab picker (bottom-right) already covers switching tabs, renaming
+    // and new chat — this menu holds the session utilities only.
     menu.addItem((item) =>
       item
         .setTitle("Session info…")
