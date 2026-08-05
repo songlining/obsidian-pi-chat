@@ -18,9 +18,10 @@ import {
 } from "obsidian";
 import type PiChatPlugin from "./main";
 import type { Conversation } from "./conversation";
-import type { UiMessage, UiState, ToolCallUi } from "./reducer";
+import type { EditDiff, UiMessage, UiState, ToolCallUi } from "./reducer";
 import { contentBlocksToParts, toolArgsSummary } from "./reducer";
 import { conversationLabel } from "./conversation-store";
+import { hasDiff, wordDiff, type DiffToken } from "./diff";
 import type { ExtensionUiRequest, ImageContent, ThinkingLevel } from "./types";
 import {
   CommandPickerModal,
@@ -674,6 +675,9 @@ export class PiChatView extends ItemView {
     }
 
     const body = row.createDiv({ cls: "pi-chat-tool-body pi-chat-hidden" });
+    if (call.edits && call.edits.length > 0) {
+      this.renderEditDiffs(body, call.edits);
+    }
     if (call.args) {
       body.createEl("pre", { cls: "pi-chat-tool-args-block", text: call.args });
     }
@@ -685,6 +689,48 @@ export class PiChatView extends ItemView {
       body.createEl("div", { cls: "pi-chat-tool-result-label", text: label });
       body.createEl("pre", { cls: "pi-chat-tool-result", text: call.result });
     }
+  }
+
+  /** Word-level old → new diff rows for an edit tool call (visibility only). */
+  private renderEditDiffs(body: HTMLElement, edits: EditDiff[]): void {
+    const cap = 3000; // chars per side before truncating the preview
+    for (const edit of edits) {
+      const block = body.createDiv({ cls: "pi-chat-diff" });
+      const diff = wordDiff(edit.oldText, edit.newText);
+      if (!hasDiff(diff)) {
+        block.createDiv({ cls: "pi-chat-diff-line", text: "(no text change)" });
+        continue;
+      }
+      this.renderDiffLine(block, "−", "pi-chat-diff-old", diff.old, cap);
+      this.renderDiffLine(block, "+", "pi-chat-diff-new", diff.new, cap);
+    }
+  }
+
+  private renderDiffLine(
+    block: HTMLElement,
+    sign: string,
+    cls: string,
+    tokens: DiffToken[],
+    cap: number,
+  ): void {
+    const line = block.createDiv({ cls: `pi-chat-diff-line ${cls}` });
+    line.createSpan({ cls: "pi-chat-diff-sign", text: sign });
+    const content = line.createSpan({ cls: "pi-chat-diff-content" });
+    let shown = 0;
+    let truncated = false;
+    for (const tok of tokens) {
+      if (shown >= cap) {
+        truncated = true;
+        break;
+      }
+      shown += tok.text.length;
+      if (tok.changed) {
+        content.createSpan({ cls: "pi-chat-diff-tok-changed", text: tok.text });
+      } else {
+        content.createSpan({ text: tok.text });
+      }
+    }
+    if (truncated) content.createSpan({ cls: "pi-chat-diff-more", text: " …" });
   }
 
   private renderSystemRow(el: HTMLElement, message: UiMessage, error = false): void {
@@ -761,6 +807,20 @@ export class PiChatView extends ItemView {
   // -------------------------------------------------------------------------
   // Actions
   // -------------------------------------------------------------------------
+
+  /** True once the composer textarea exists (called from main.ts after focus). */
+  public hasComposer(): boolean {
+    return !!this.inputEl && this.inputEl.isConnected;
+  }
+
+  /** Pre-fill the composer with text (e.g. a vault selection) and focus it. */
+  public prefillComposer(text: string): void {
+    if (!this.inputEl) return;
+    this.inputEl.value = text;
+    this.inputEl.focus();
+    const len = text.length;
+    this.inputEl.setSelectionRange(len, len);
+  }
 
   private sendCurrentInput(): void {
     const text = this.inputEl.value.trim();

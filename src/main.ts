@@ -45,6 +45,23 @@ export default class PiChatPlugin extends Plugin {
       name: "Pi Chat: New conversation",
       callback: () => void this.openNewChat(),
     });
+    this.addCommand({
+      id: "ask-about-selection",
+      name: "Pi Chat: Ask Pi about the selection",
+      hotkeys: [{ modifiers: ["Mod", "Shift"], key: "E" }],
+      editorCallback: (editor, view) => void this.openSelectionPrompt(editor, view),
+    });
+    // Right-click a selection in any note → “Ask Pi about selection”.
+    this.registerEvent(
+      this.app.workspace.on("editor-menu", (menu, editor, view) => {
+        menu.addItem((item) =>
+          item
+            .setTitle("Ask Pi about selection")
+            .setIcon("bot-message-square")
+            .onClick(() => void this.openSelectionPrompt(editor, view)),
+        );
+      }),
+    );
 
     this.addSettingTab(new PiChatSettingTab(this.app, this, this.settings, (s) => void this.saveSettings()));
 
@@ -306,6 +323,54 @@ export default class PiChatPlugin extends Plugin {
       state: { conversationId },
     });
     this.app.workspace.revealLeaf(leaf);
+  }
+
+  /**
+   * Selection-pinned prompt: pre-fill the active conversation's composer with
+   * the selected text (byte-exact, fenced) so the user can ask Pi to fix /
+   * rewrite / summarise it. Creates a conversation if none is open.
+   */
+  async openSelectionPrompt(
+    editor: import("obsidian").Editor,
+    view: import("obsidian").MarkdownView | import("obsidian").MarkdownFileInfo,
+  ): Promise<void> {
+    const selection = editor.getSelection();
+    if (!selection) {
+      new Notice("Select some text in a note first, then ask Pi about it.");
+      return;
+    }
+    await this.ensurePiEnv();
+
+    let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_PI_CHAT)[0] ?? null;
+    const active = this.app.workspace.activeLeaf;
+    if (active && active.view instanceof PiChatView) leaf = active;
+    if (!leaf) {
+      const freshLeaf = this.app.workspace.getRightLeaf(false);
+      if (!freshLeaf) {
+        new Notice("Could not open the Pi Chat panel.");
+        return;
+      }
+      leaf = freshLeaf;
+      await freshLeaf.setViewState({ type: VIEW_TYPE_PI_CHAT, active: true, state: {} });
+    }
+    this.app.workspace.revealLeaf(leaf);
+
+    const piChat = leaf.view instanceof PiChatView ? leaf.view : null;
+    if (!piChat) return;
+    // The view binds its DOM (and composer) synchronously on open; wait briefly
+    // if the leaf was just created.
+    const t0 = Date.now();
+    while (!piChat.hasComposer() && Date.now() - t0 < 5000) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    const path = view.file ? view.file.path : "";
+    const name = view.file ? view.file.basename : "the note";
+    const preamble = path ? `Selected from [[${path}|${name}]] (${path}):\n\n` : "Selected text:\n\n";
+    // Four-backtick fence keeps the selection byte-exact even if it contains ```
+    const text = `${preamble}\`\`\`\`text\n${selection}\n\`\`\`\`\n\n`;
+    piChat.prefillComposer(text);
+    new Notice("Selection sent to Pi Chat — type what to do with it, then press Enter.");
   }
 
   private getVaultPath(): string {

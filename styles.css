@@ -322,6 +322,54 @@
   border-top: 1px solid var(--background-modifier-border);
 }
 
+/* Word-level edit diff preview (visibility only — no approval gate) */
+.pi-chat-diff {
+  margin: 4px 0 8px;
+}
+
+.pi-chat-diff-line {
+  display: flex;
+  gap: 6px;
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pi-chat-diff-sign {
+  flex: none;
+  width: 10px;
+  text-align: center;
+  opacity: 0.7;
+  user-select: none;
+}
+
+.pi-chat-diff-old {
+  color: var(--text-muted);
+}
+
+.pi-chat-diff-new {
+  color: var(--text-normal);
+}
+
+.pi-chat-diff-old .pi-chat-diff-tok-changed {
+  color: var(--text-error);
+  text-decoration: line-through;
+  background: rgba(255, 59, 48, 0.12);
+  border-radius: 2px;
+}
+
+.pi-chat-diff-new .pi-chat-diff-tok-changed {
+  color: var(--text-success);
+  background: rgba(0, 200, 83, 0.14);
+  border-radius: 2px;
+}
+
+.pi-chat-diff-more {
+  opacity: 0.6;
+}
+
 .pi-chat-tool-body pre {
   margin: 4px 0;
   max-height: 200px;

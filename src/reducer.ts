@@ -36,6 +36,13 @@ export interface ToolCallUi {
   /** Final result text (set on tool_execution_end). */
   result: string;
   isError: boolean;
+  /** For edit tool calls: old → new text pairs, captured from args. */
+  edits?: EditDiff[];
+}
+
+export interface EditDiff {
+  oldText: string;
+  newText: string;
 }
 
 export interface UiMessage {
@@ -163,6 +170,25 @@ function stringifyArgs(args: Record<string, unknown> | undefined): string {
   } catch {
     return String(args);
   }
+}
+
+/**
+ * For `edit` tool calls, extract the old → new text pairs from args so the
+ * chat can render word-level diffs. pi's edit tool args are
+ * `{ path, edits: [{ oldText, newText }] }`.
+ */
+function extractEditDiffs(
+  name: string,
+  args: Record<string, unknown> | undefined,
+): EditDiff[] | undefined {
+  if (name !== "edit" || !args) return undefined;
+  const edits = args.edits;
+  if (!Array.isArray(edits) || edits.length === 0) return undefined;
+  const out = edits.filter(
+    (e): e is EditDiff =>
+      !!e && typeof (e as EditDiff).oldText === "string" && typeof (e as EditDiff).newText === "string",
+  );
+  return out.length > 0 ? out : undefined;
 }
 
 export function contentBlocksToParts(content: AssistantMessage["content"]) {
@@ -521,6 +547,7 @@ function toolCallFromContent(tc: ToolCallContent): ToolCallUi {
     name: tc.name,
     args: stringifyArgs(args),
     argsSummary: toolArgsSummary(tc.name, args),
+    edits: extractEditDiffs(tc.name, args),
     status: "pending",
     output: "",
     result: "",
@@ -558,6 +585,7 @@ function onToolStart(
       name: toolName,
       args: stringifyArgs(args),
       argsSummary: toolArgsSummary(toolName, args),
+      edits: extractEditDiffs(toolName, args),
       status: "running",
     };
     msg.toolCalls = calls;
@@ -575,6 +603,7 @@ function onToolStart(
         name: toolName,
         args: stringifyArgs(args),
         argsSummary: toolArgsSummary(toolName, args),
+        edits: extractEditDiffs(toolName, args),
         status: "running",
         output: "",
         result: "",
