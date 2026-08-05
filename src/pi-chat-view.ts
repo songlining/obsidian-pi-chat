@@ -431,21 +431,10 @@ export class PiChatView extends ItemView {
     // Messages (diff by key)
     this.renderMessages(state);
 
-    // Send/Stop button
-    const running = state.isRunning || state.isStreaming;
-    if (running) {
-      if (this.sendBtn.buttonEl.getText() !== "Stop") {
-        this.sendBtn.setButtonText("Stop");
-        this.sendBtn.buttonEl.removeClass("is-cta");
-        this.sendBtn.buttonEl.addClass("pi-chat-stop-btn");
-      }
-    } else {
-      if (this.sendBtn.buttonEl.getText() !== "Send") {
-        this.sendBtn.setButtonText("Send");
-        this.sendBtn.buttonEl.removeClass("pi-chat-stop-btn");
-        this.sendBtn.buttonEl.addClass("is-cta");
-      }
-    }
+    // The dedicated Stop button (next to Send) handles aborting — the send
+    // button itself always stays "Send". (Legacy code that relabelled the
+    // send button to "Stop" while running was removed; it produced a second
+    // Stop button alongside the real one.)
   }
 
   private renderStatus(state: UiState): void {
@@ -779,11 +768,6 @@ export class PiChatView extends ItemView {
     const conv = this.conversation;
     if (!conv) return;
 
-    const running = conv.state.isRunning || conv.state.isStreaming;
-    if (this.sendBtn.buttonEl.getText() === "Stop" && running) {
-      conv.abort();
-      return;
-    }
     const images = this.pastedImages.length > 0 ? this.pastedImages : undefined;
     this.inputEl.value = "";
     this.inputEl.style.height = "auto";
