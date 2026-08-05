@@ -13,6 +13,9 @@ Pi Chat is a thin shell over your real `pi` binary. It spawns `pi --mode rpc` pe
 - **Streamed markdown replies** with visible, collapsible tool-call rows
 - **Thinking blocks** — collapsed by default, expandable
 - **Conversations, plugin-owned**: start empty; create, rename, switch and delete conversations in the pane. Each conversation contains a Pi session once you chat in it
+- **Slash commands** — type `/` in the composer to pick from all of Pi's skills, templates and extension commands (plus `/reload`); `/clear`, `/fork` etc. work and the pane reconciles to the server state
+- **Image paste** — paste up to 4 images per message (thumbnails preview, sent as image content)
+- **Stop / Esc abort** — visible Stop button while the agent runs; Escape aborts the turn
 - **In-chat model switcher and thinking-level switcher** sourced from Pi's own catalogue
 - **Pi extensions work as-is** — extension `select`/`confirm`/`input`/`editor` dialogs render inline in the chat; `notify` maps to an Obsidian Notice
 - **Vault-aware tools** — `edit`/`write` tool rows link to the note, so Obsidian's native change detection refreshes edited files
@@ -51,6 +54,17 @@ Obsidian (renderer)
 - **Environment inheritance**: the subprocess gets your full login-shell environment, so `~/.pi` auth and `PI_*` variables behave exactly like in the terminal. **The plugin never stores or requests API keys.**
 - **Conversations are the plugin's; sessions are Pi's**: the plugin keeps a small registry of conversations in `data.json` (starting empty). Each conversation *contains* a Pi session (`~/.pi/agent/sessions/…`) once you've chatted in it; deleting a conversation removes its session file too.
 
+## Companion pi extensions
+
+A few Pi Chat features are powered by small extensions in `~/.pi/agent/extensions/` (the same mechanism Pi's TUI uses — no plugin-side code):
+
+| File | Command | Purpose |
+|---|---|---|
+| `clear-context.ts` | `/clear` | Reset Pi's active context to the root of the session tree; the pane reconciles to the cleared state |
+| `reload-context.ts` | `/reload` | Reload extensions, skills, prompts, themes and session state from disk (TUI's built-in `/reload` made RPC-callable) |
+
+If an extension is missing, the command falls back gracefully (e.g. `/reload` without the extension still re-syncs the pane with Pi's persisted session state). The slash picker (`/`) shows what's actually available on your machine.
+
 ## Settings
 
 Three fields, nothing more:
@@ -62,6 +76,8 @@ Three fields, nothing more:
 | HTML export folder | Vault-relative folder for exported sessions |
 
 Everything else lives in `~/.pi` by design.
+
+See **[CHANGELOG.md](CHANGELOG.md)** for the full history.
 
 ## Privacy
 
