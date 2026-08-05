@@ -925,10 +925,11 @@ export class PiChatView extends ItemView {
   }
 
   /**
-   * Expand @-mentions into the mentioned note's content before sending:
-   * - `@[[Note Name]]` (Obsidian-style link, inserted by the picker)
-   * - `@path/to/note.md` (exact vault path, for hand-typed references)
-   * Mentions that don't resolve to a vault file are left as-is.
+   * Resolve @-mentions to exact vault paths before sending (no content embed):
+   * - `@[[Note Name]]` (Obsidian-style link, inserted by the picker) → `@<path>`
+   * - `@path/to/note.md` (hand-typed) stays as-is
+   * pi runs with cwd = vault root, so it can read the referenced file with its
+   * own tools — full-file embedding is only used by "Ask Pi about this note".
    */
   private async expandMentions(text: string): Promise<string> {
     let expanded = text;
@@ -936,33 +937,9 @@ export class PiChatView extends ItemView {
     for (const m of text.matchAll(linkRe)) {
       const dest = this.app.metadataCache.getFirstLinkpathDest(m[1], "");
       if (!dest || !(dest instanceof TFile)) continue;
-      const block = await this.fileContextBlock(dest);
-      if (block) expanded = expanded.replace(m[0], block);
-    }
-    const pathRe = /@((?:[\w.\-/ ])+\.(?:md|markdown|txt))/g;
-    for (const m of text.matchAll(pathRe)) {
-      const file = this.app.vault.getAbstractFileByPath(m[1]);
-      if (!file || !(file instanceof TFile)) continue;
-      const block = await this.fileContextBlock(file);
-      if (block) expanded = expanded.replace(m[0], block);
+      expanded = expanded.replace(m[0], `@${dest.path}`);
     }
     return expanded;
-  }
-
-  /** Fenced, capped content block for a referenced note (guarantees context). */
-  private async fileContextBlock(file: TFile): Promise<string | null> {
-    let content = "";
-    try {
-      content = await this.app.vault.read(file);
-    } catch {
-      return null;
-    }
-    const cap = 8000;
-    const truncated = content.length > cap;
-    if (truncated) {
-      content = content.slice(0, cap) + "\n… (truncated — pi can read the full note via its tools)";
-    }
-    return `Referenced note: [[${file.path}|${file.basename}]] (${file.path})\n\n\`\`\`\`text\n${content}\n\`\`\`\`\n`;
   }
 
   private async openModelSwitcher(): Promise<void> {
