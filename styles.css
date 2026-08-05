@@ -429,7 +429,7 @@
   display: flex;
 }
 
-/* Tiny delete ✕ inside picker menu items */
+/* Tiny delete ✕ inside picker menu items — always visible, subtle */
 .pi-chat-menu-delete {
   flex: 0 0 auto;
   margin-left: auto;
@@ -444,7 +444,7 @@
   background: none;
   color: var(--text-faint);
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.6;
 }
 
 .menu-item:hover .pi-chat-menu-delete {
