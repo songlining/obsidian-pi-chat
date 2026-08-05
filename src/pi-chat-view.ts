@@ -918,13 +918,27 @@ export class PiChatView extends ItemView {
     const menu = new Menu();
 
     // Every plugin-owned conversation (newest first). Picking one switches
-    // this pane to it; the current one is checked.
+    // this pane to it; the current one is checked. A tiny ✕ on each entry
+    // deletes that conversation in one click.
     for (const record of records) {
       const label = conversationLabel(record);
       const active = record.id === currentId;
       menu.addItem((item) => {
         item.setTitle(label);
         if (active) item.setChecked(true);
+        const dom = (item as unknown as { dom: HTMLElement }).dom;
+        if (dom) {
+          const delBtn = dom.createEl("button", {
+            cls: "pi-chat-menu-delete",
+            attr: { "aria-label": `Delete ${label}`, title: "Delete conversation" },
+          });
+          setIcon(delBtn, "x");
+          delBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            void this.deleteConversationFromMenu(record, menu);
+          });
+        }
         item.onClick(() => void this.switchToConversation(record));
         return item;
       });
@@ -961,6 +975,29 @@ export class PiChatView extends ItemView {
     const currentId = this.getState().conversationId;
     if (record.id === currentId) return;
     await this.plugin.showConversationInLeaf(this.leaf, record.id);
+  }
+
+  /** Delete a conversation from the picker's ✕ button, then close the menu. */
+  private async deleteConversationFromMenu(
+    record: import("./conversation-store").ConversationRecord,
+    menu: Menu,
+  ): Promise<void> {
+    menu.hide();
+    if (record.id === this.getState().conversationId) {
+      // Deleting what the pane is showing: keep the confirm + park flow.
+      await this.deleteCurrentConversation();
+      return;
+    }
+    // Non-current: remove instantly (record + contained session file).
+    if (record.sessionFile) {
+      try {
+        await this.plugin.deleteConversationFile(record.sessionFile);
+      } catch (e) {
+        console.warn("[pi-chat] could not delete session file", e);
+      }
+    }
+    this.plugin.deleteConversation(record.id);
+    new Notice(`Deleted “${conversationLabel(record)}”.`);
   }
 
   /** Delete the current conversation, then park the pane on another one. */

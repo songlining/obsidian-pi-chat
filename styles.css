@@ -429,6 +429,34 @@
   display: flex;
 }
 
+/* Tiny delete ✕ inside picker menu items */
+.pi-chat-menu-delete {
+  flex: 0 0 auto;
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.menu-item:hover .pi-chat-menu-delete {
+  opacity: 1;
+}
+
+.pi-chat-menu-delete:hover {
+  background: var(--background-modifier-error);
+  color: var(--text-on-accent);
+  opacity: 1;
+}
+
 /* Pasted-image previews above the composer */
 .pi-chat-preview-bar {
   flex: 0 0 auto;
