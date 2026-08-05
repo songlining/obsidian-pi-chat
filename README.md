@@ -14,6 +14,7 @@ Pi Chat is a thin shell over your real `pi` binary. It spawns `pi --mode rpc` pe
 - **Thinking blocks** — collapsed by default, expandable
 - **Conversations, plugin-owned**: start empty; create, rename, switch and delete conversations in the pane. Each conversation contains a Pi session once you chat in it
 - **Slash commands** — type `/` in the composer to pick from all of Pi's skills, templates and extension commands (plus `/reload`); `/clear`, `/fork` etc. work and the pane reconciles to the server state
+- **`@`-mentions** — type `@` in the composer to pick a vault note by file name; mentions expand to the note's content when sent (guaranteed context), hand-typed `@path/to/note.md` works too
 - **Image paste** — paste up to 4 images per message (thumbnails preview, sent as image content)
 - **Stop / Esc abort** — visible Stop button while the agent runs; Escape aborts the turn
 - **In-chat model switcher and thinking-level switcher** sourced from Pi's own catalogue
