@@ -19,7 +19,8 @@ Pi Chat is a thin shell over your real `pi` binary. It spawns `pi --mode rpc` pe
 - **Stop / Esc abort** — visible Stop button while the agent runs; Escape aborts the turn
 - **In-chat model switcher and thinking-level switcher** sourced from Pi's own catalogue
 - **Pi extensions work as-is** — extension `select`/`confirm`/`input`/`editor` dialogs render inline in the chat; `notify` maps to an Obsidian Notice
-- **Vault-aware tools** — `edit`/`write` tool rows link to the note, so Obsidian's native change detection refreshes edited files; edit calls show a word-level **old→new diff** inside the tool row (red struck / green)
+- **Vault-aware tools** — `edit`/`write` tool rows link to the note, so Obsidian's native change detection refreshes edited files; edit calls show a word-level **old→new diff** inside the tool row (red struck / green); tool runs that plot images (bash → PNG) render **clickable thumbnails** right in the tool row
+- **Image embeds in chat** — `![[chart.png]]` in Pi's replies renders as the actual image (resource-path rewrite, code fences untouched)
 - **Ask Pi about the selection** — select text in any note, hit `Mod+Shift+E` (or right-click → *Ask Pi about selection*): the selection lands byte-exact in the composer with a note link, ready for "fix / rewrite / summarise"
 - **Ask Pi about a note** — right-click any note in the file explorer (or its tab header) → *Ask Pi about this note*: the note's content becomes part of the composer context (fenced, 8k cap with a read-the-rest hint)
 - **One pane, many conversations** — the bottom-right picker switches the pane between conversations in place
