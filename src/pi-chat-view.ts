@@ -602,7 +602,7 @@ export class PiChatView extends ItemView {
       this.renderTimers.delete(key);
       mdEl!.empty();
       // MarkdownRenderer.render can throw on broken markdown; guard it.
-      void MarkdownRenderer.render(this.app, markdown, mdEl!, this.getVaultRoot(), this)
+      void MarkdownRenderer.render(this.app, this.embedImagesInMarkdown(markdown), mdEl!, this.getVaultRoot(), this)
         .catch(() => {
           mdEl!.createDiv({ text: markdown });
         });
@@ -682,6 +682,11 @@ export class PiChatView extends ItemView {
       });
     }
 
+    // Images the tool produced (e.g. a chart plotted via bash) — always visible.
+    if (call.status === "success" || call.status === "error") {
+      this.renderToolImages(row, call);
+    }
+
     const body = row.createDiv({ cls: "pi-chat-tool-body pi-chat-hidden" });
     if (call.edits && call.edits.length > 0) {
       this.renderEditDiffs(body, call.edits);
@@ -739,6 +744,64 @@ export class PiChatView extends ItemView {
       }
     }
     if (truncated) content.createSpan({ cls: "pi-chat-diff-more", text: " …" });
+  }
+
+  /**
+   * Render `![[vault image]]` embeds as real images in the chat. The pane
+   * renders markdown with a directory sourcePath, so Obsidian's internal-embed
+   * resolution would fail; rewrite embeds to plain image tags using the file's
+   * resource path (which the renderer passes through as `<img>`).
+   */
+  private embedImagesInMarkdown(markdown: string): string {
+    const rewrite = (text: string) =>
+      text.replace(
+        /!\[\[([^\]|#]+?)(?:\|([^\]]*))?\]\]/g,
+        (_match, namePart: string, altPart: string | undefined) => {
+          const file =
+            this.app.metadataCache.getFirstLinkpathDest(namePart.trim(), this.getVaultRoot()) ??
+            this.app.vault.getAbstractFileByPath(namePart.trim());
+          if (!file || !(file instanceof TFile)) return _match;
+          const resource = this.app.vault.getResourcePath(file);
+          return `![${altPart?.trim() ?? file.basename}](${resource})`;
+        },
+      );
+    // Leave code fences untouched (a fence may legitimately show ![[ syntax).
+    const fenceRe = /```[\s\S]*?```/g;
+    let out = "";
+    let last = 0;
+    for (const m of markdown.matchAll(fenceRe)) {
+      out += rewrite(markdown.slice(last, m.index)) + m[0];
+      last = m.index + m[0].length;
+    }
+    return out + rewrite(markdown.slice(last));
+  }
+
+  /**
+   * Show vault images that a tool run created/referenced (e.g. pi's bash step
+   * plotting a PNG): scan the tool result/output for vault image paths and
+   * render thumbnails directly in the row (always visible, click to open).
+   */
+  private renderToolImages(row: HTMLElement, call: ToolCallUi): void {
+    const text = `${call.result}\n${call.output}`;
+    const seen = new Set<string>();
+    let shown = 0;
+    for (const m of text.matchAll(/[\w.\/\-]+\.(?:png|jpe?g|gif|webp|svg)/gi)) {
+      const path = m[0].trim();
+      if (seen.has(path)) continue;
+      seen.add(path);
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (!file || !(file instanceof TFile)) continue;
+      const img = row.createEl("img", {
+        cls: "pi-chat-tool-image",
+        attr: { src: this.app.vault.getResourcePath(file), alt: path },
+      });
+      img.title = path;
+      img.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.openVaultFile(path);
+      });
+      if (++shown >= 4) break;
+    }
   }
 
   private renderSystemRow(el: HTMLElement, message: UiMessage, error = false): void {

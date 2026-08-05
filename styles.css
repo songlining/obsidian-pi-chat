@@ -309,6 +309,16 @@
   color: var(--text-error);
 }
 
+.pi-chat-tool-image {
+  display: block;
+  max-width: min(100%, 480px);
+  max-height: 260px;
+  margin: 6px 0 2px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--background-modifier-border);
+}
+
 .pi-chat-tool-file {
   color: var(--text-accent);
   cursor: pointer;
