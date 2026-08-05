@@ -198,8 +198,10 @@ export class PiChatView extends ItemView {
       case "notify":
         new Notice(req.message, 4000);
         break;
+      // set_editor_text is pi's 'fill the editor' request (TUI input box).
+      // Writing it into the composer dumps expanded skills/commands into the
+      // user's draft — unnecessary noise in a chat panel, so ignore it.
       case "set_editor_text":
-        this.inputEl.value = req.text;
         break;
       case "setTitle":
         this.headerTitleEl.setText(req.title);
