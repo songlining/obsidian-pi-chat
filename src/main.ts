@@ -271,7 +271,20 @@ export default class PiChatPlugin extends Plugin {
     // explicitly matters: setViewState on a live leaf calls setState in place,
     // and without an id the current conversation would just be kept.
     const record = this.createConversation();
-    await this.openLeaf({ conversationId: record.id });
+    const leaves = this.app.workspace.getLeavesOfType("pi-chat");
+    const active = this.app.workspace.activeLeaf;
+    const target =
+      active && active.view instanceof PiChatView
+        ? active
+        : leaves.length > 0
+          ? leaves[0]
+          : null;
+    if (target) {
+      // One pane: switch it to the new conversation instead of stacking leaves.
+      await this.showConversationInLeaf(target, record.id);
+    } else {
+      await this.openLeaf({ conversationId: record.id });
+    }
   }
 
   /** Switch the given leaf to a conversation (re-binds the view to it). */

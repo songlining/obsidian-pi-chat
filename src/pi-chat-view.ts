@@ -951,7 +951,7 @@ export class PiChatView extends ItemView {
     await this.plugin.showConversationInLeaf(this.leaf, record.id);
   }
 
-  /** Delete the current conversation, then park the pane on a fresh one. */
+  /** Delete the current conversation, then park the pane on another one. */
   private async deleteCurrentConversation(): Promise<void> {
     const currentId = this.getState().conversationId;
     if (!currentId) return;
@@ -972,8 +972,12 @@ export class PiChatView extends ItemView {
       }
     }
     this.plugin.deleteConversation(currentId);
-    const fresh = this.plugin.createConversation();
-    await this.plugin.showConversationInLeaf(this.leaf, fresh.id);
+    // Park the pane on the most recent remaining conversation. Only create a
+    // fresh one when the registry would otherwise be empty — deleting must
+    // never appear to create a replacement unnamed conversation.
+    const remaining = this.plugin.listConversations();
+    const next = remaining[0] ?? this.plugin.createConversation();
+    await this.plugin.showConversationInLeaf(this.leaf, next.id);
     new Notice("Conversation deleted.");
   }
 
