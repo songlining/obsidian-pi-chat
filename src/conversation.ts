@@ -326,7 +326,7 @@ export class Conversation {
   }
 
   /** Queue a steering message while running, or a plain prompt when idle. */
-  async prompt(text: string, images?: ImageContent[]): Promise<void> {
+  async prompt(text: string, images?: ImageContent[], displayText?: string): Promise<void> {
     const streaming = this.state.isRunning || this.state.isStreaming;
     // Plugin-level slash command: /reload mirrors the TUI's built-in — it
     // reloads pi's extensions, skills, prompts, themes and the session from
@@ -347,7 +347,7 @@ export class Conversation {
       await this.loadHistory();
       return;
     }
-    this.dispatch({ type: "user_message", text, images });
+    this.dispatch({ type: "user_message", text: displayText ?? text, images });
     try {
       await this.session.send({
         type: "prompt",

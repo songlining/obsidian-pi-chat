@@ -12,9 +12,50 @@ import {
   PluginSettingTab,
   Setting,
   SuggestModal,
+  TFile,
   TextComponent,
 } from "obsidian";
 import type { Model, SessionStatsData, SlashCommand, ThinkingLevel } from "./types";
+
+// ---------------------------------------------------------------------------
+// @-mentions: pick a vault note by file name
+// ---------------------------------------------------------------------------
+
+export class FileMentionModal extends FuzzySuggestModal<TFile> {
+  private filesList: TFile[];
+  private onChoose: (file: TFile) => void;
+
+  constructor(app: App, files: TFile[], onChoose: (file: TFile) => void) {
+    super(app);
+    this.onChoose = onChoose;
+    this.filesList = files;
+    this.setPlaceholder("Mention a vault note (@ matches file names)…");
+    this.setInstructions([
+      { command: "↑↓", purpose: "navigate" },
+      { command: "↵", purpose: "insert mention" },
+      { command: "esc", purpose: "dismiss" },
+    ]);
+  }
+
+  getItems(): TFile[] {
+    return this.filesList;
+  }
+
+  getItemText(file: TFile): string {
+    return `${file.basename} — ${file.path}`;
+  }
+
+  renderSuggestion(match: import("obsidian").FuzzyMatch<TFile>, el: HTMLElement): void {
+    const file = match.item;
+    el.empty();
+    el.createDiv({ cls: "pi-chat-suggestion-name" }).setText(`@[[${file.basename}]]`);
+    el.createDiv({ cls: "pi-chat-suggestion-sub" }).setText(file.path);
+  }
+
+  onChooseItem(file: TFile, _evt: MouseEvent | KeyboardEvent): void {
+    this.onChoose(file);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Slash commands (skills, templates, extension commands)

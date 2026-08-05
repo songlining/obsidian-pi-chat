@@ -26,6 +26,7 @@ import type { ExtensionUiRequest, ImageContent, ThinkingLevel } from "./types";
 import {
   CommandPickerModal,
   ConfirmModal,
+  FileMentionModal,
   ModelSwitcherModal,
   RenameSessionModal,
   SessionInfoModal,
@@ -339,6 +340,13 @@ export class PiChatView extends ItemView {
           const value = this.inputEl.value;
           if (value.length === 0 || /\s$/.test(value)) {
             void this.openCommandPicker();
+          }
+        } else if (e.key === "@") {
+          // Type "@" at the start of a message (or after whitespace) to
+          // mention a vault note — the picker matches file names.
+          const value = this.inputEl.value;
+          if (value.length === 0 || /\s$/.test(value)) {
+            void this.openFileMentionPicker();
           }
         }
       });
@@ -833,7 +841,11 @@ export class PiChatView extends ItemView {
     this.inputEl.style.height = "auto";
     this.pastedImages = [];
     this.renderPastedImages();
-    void conv.prompt(text, images);
+    // @-mentions stay readable in the chat row but are expanded to the note's
+    // content when sent, so the referenced file is guaranteed to be in context.
+    void this.expandMentions(text).then((expanded) =>
+      conv.prompt(expanded, images, text),
+    );
   }
 
   /** Rebuild the pasted-image preview strip above the composer. */
@@ -897,6 +909,60 @@ export class PiChatView extends ItemView {
       this.inputEl.focus();
       this.inputEl.setSelectionRange(this.inputEl.value.length, this.inputEl.value.length);
     }).open();
+  }
+
+  private async openFileMentionPicker(): Promise<void> {
+    const files = this.app.vault.getMarkdownFiles();
+    if (files.length === 0) return;
+    new FileMentionModal(this.app, files, (file) => {
+      // Replace the trailing "@" (the trigger char) with the mention token.
+      const value = this.inputEl.value;
+      const atIdx = value.lastIndexOf("@");
+      this.inputEl.value = (atIdx >= 0 ? value.slice(0, atIdx) : value) + `@[[${file.basename}]]`;
+      this.inputEl.focus();
+      this.inputEl.setSelectionRange(this.inputEl.value.length, this.inputEl.value.length);
+    }).open();
+  }
+
+  /**
+   * Expand @-mentions into the mentioned note's content before sending:
+   * - `@[[Note Name]]` (Obsidian-style link, inserted by the picker)
+   * - `@path/to/note.md` (exact vault path, for hand-typed references)
+   * Mentions that don't resolve to a vault file are left as-is.
+   */
+  private async expandMentions(text: string): Promise<string> {
+    let expanded = text;
+    const linkRe = /@\[\[([^\[\]]+)\]\]/g;
+    for (const m of text.matchAll(linkRe)) {
+      const dest = this.app.metadataCache.getFirstLinkpathDest(m[1], "");
+      if (!dest || !(dest instanceof TFile)) continue;
+      const block = await this.fileContextBlock(dest);
+      if (block) expanded = expanded.replace(m[0], block);
+    }
+    const pathRe = /@((?:[\w.\-/ ])+\.(?:md|markdown|txt))/g;
+    for (const m of text.matchAll(pathRe)) {
+      const file = this.app.vault.getAbstractFileByPath(m[1]);
+      if (!file || !(file instanceof TFile)) continue;
+      const block = await this.fileContextBlock(file);
+      if (block) expanded = expanded.replace(m[0], block);
+    }
+    return expanded;
+  }
+
+  /** Fenced, capped content block for a referenced note (guarantees context). */
+  private async fileContextBlock(file: TFile): Promise<string | null> {
+    let content = "";
+    try {
+      content = await this.app.vault.read(file);
+    } catch {
+      return null;
+    }
+    const cap = 8000;
+    const truncated = content.length > cap;
+    if (truncated) {
+      content = content.slice(0, cap) + "\n… (truncated — pi can read the full note via its tools)";
+    }
+    return `Referenced note: [[${file.path}|${file.basename}]] (${file.path})\n\n\`\`\`\`text\n${content}\n\`\`\`\`\n`;
   }
 
   private async openModelSwitcher(): Promise<void> {
