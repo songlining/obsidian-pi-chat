@@ -1,6 +1,28 @@
-# Inline edit + edit-diff — findings & plan (NOT STARTED)
+# Inline edit + edit-diff — DONE (2026-08-04)
 
-Status: **investigation only** — nothing built yet. Pick up from here.
+Both features shipped in commit `33367e8` (v1.1.0 assets). This file keeps the
+investigation trail; nothing here is pending.
+
+Shipped:
+1. **Selection-pinned prompt** — command "Ask Pi about the selection"
+   (default hotkey `Mod+Shift+E`) + editor-menu entry. Pre-fills the active
+   conversation's composer with the selection (four-backtick fenced,
+   byte-exact, `[[note]]` preamble), focuses it, creates a pane if none open.
+2. **Edit-diff visibility** — `src/diff.ts` (word-level LCS, no deps); reducer
+   captures `edits: [{oldText,newText}]` from edit tool args (`extractEditDiffs`);
+   tool row body renders −old / +new with red-struck / green word highlights
+   (3k char cap per side). Visibility only — no approval gate, matching pi's
+   trust model.
+
+Open questions resolved:
+1. Full `args` (incl. `edits[]`) **do** arrive in `tool_execution_start` events
+   (verified live). `truncate.js` only limits tool *outputs*.
+2. `edit-diff.js` not needed — it's pi's TUI patch/diff for its own display;
+   our own LCS is ~60 lines and dependency-free.
+3. Hotkey: `Mod+Shift+E` (user-remappable); editor-menu is the discoverable path.
+4. No-leaf case: creates a right-leaf via `getRightLeaf(false)`.
+
+Original plan (kept for reference):
 
 Goal (user-approved direction): two features, deliberately NOT the full
 Claudian "inline edit with approval-gate diff" (pi's trust model is
