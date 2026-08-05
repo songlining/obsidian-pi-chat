@@ -81,7 +81,15 @@ export class PiChatView extends ItemView {
   }
 
   getDisplayText(): string {
+    const record = this.currentRecord();
+    if (record) return conversationLabel(record);
     return this.conversation?.state.sessionName || "Pi Chat";
+  }
+
+  /** The registry record this view is bound to, if any. */
+  private currentRecord(): import("./conversation-store").ConversationRecord | undefined {
+    const id = this.getState().conversationId;
+    return id ? this.plugin.getConversation(id) : undefined;
   }
 
   getIcon(): string {
@@ -376,11 +384,17 @@ export class PiChatView extends ItemView {
     // Stop button shows only while the agent is running.
     this.stopBtn.buttonEl.style.cssText = state.isRunning ? "" : "display: none";
 
+    // The conversation record is the source of truth for the name (a fresh
+    // conversation has no Pi session name yet, but the user may have renamed
+    // it). Fall back to the Pi session name when there's no record.
+    const record = this.currentRecord();
+    const convName = record ? conversationLabel(record) : state.sessionName;
+
     // Header + tab title (tab names come from the Rename button)
-    const title = state.sessionName || "Pi Chat";
+    const title = convName || "Pi Chat";
     if (this.headerTitleEl.getText() !== title) this.headerTitleEl.setText(title);
-    if (this.headerTitleEl.getAttribute("data-name") !== state.sessionName) {
-      this.headerTitleEl.setAttribute("data-name", state.sessionName ?? "");
+    if (this.headerTitleEl.getAttribute("data-name") !== (record?.name ?? state.sessionName ?? "")) {
+      this.headerTitleEl.setAttribute("data-name", record?.name ?? state.sessionName ?? "");
     }
     // Refresh the visible tab label whenever the session name changes.
     if (this.lastTabTitle !== title) {
@@ -391,8 +405,8 @@ export class PiChatView extends ItemView {
     this.modelChipEl.setText(state.model ? `${state.model.provider}/${state.model.name}` : "model…");
     this.thinkingChipEl.setText(state.thinkingLevel ? `thinking: ${state.thinkingLevel}` : "thinking…");
 
-    // Tab picker (bottom-right, left): the tab's session name.
-    this.tabPickerLabel.setText(state.sessionName || "Unnamed");
+    // Tab picker (bottom-right, left): the conversation's name.
+    this.tabPickerLabel.setText(convName || "Unnamed");
     this.tabPickerEl.setAttribute("title", state.sessionFile || "");
 
     // Rename box: keep in sync unless the user is mid-edit.
@@ -857,9 +871,11 @@ export class PiChatView extends ItemView {
   private showRename(): void {
     const conv = this.conversation;
     if (!conv) return;
+    const record = this.currentRecord();
+    const currentName = record?.name || conv.state.sessionName || "";
     new RenameSessionModal(
       this.app,
-      conv.state.sessionName ?? "",
+      currentName,
       (name) => void this.renameConversation(name),
     ).open();
   }
@@ -871,6 +887,9 @@ export class PiChatView extends ItemView {
     const id = this.getState().conversationId;
     if (id) this.plugin.renameConversation(id, name);
     void conv.rename(name);
+    // The record is the label source now; reflect the rename immediately even
+    // if the Pi session name hasn't propagated (fresh conversations).
+    this.render(conv.state);
   }
 
   private applyRenameFromInput(): void {
