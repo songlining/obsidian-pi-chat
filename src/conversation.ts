@@ -328,6 +328,25 @@ export class Conversation {
   /** Queue a steering message while running, or a plain prompt when idle. */
   async prompt(text: string, images?: ImageContent[]): Promise<void> {
     const streaming = this.state.isRunning || this.state.isStreaming;
+    // Plugin-level slash command: /reload mirrors the TUI's built-in — it
+    // reloads pi's extensions, skills, prompts, themes and the session from
+    // disk. pi has no RPC wire command for reload, so we run the reload-context
+    // extension via a prompt; if it's not installed, fall back to re-syncing
+    // the pane with pi's persisted session state.
+    if (text.trim() === "/reload" && !images?.length) {
+      if (streaming) {
+        this.pushError("Wait for the current response to finish before reloading.");
+        return;
+      }
+      const commands = await this.getCommands().catch(() => [] as SlashCommand[]);
+      if (commands.some((c) => c.name === "reload")) {
+        // Extension executes immediately; no agent run starts.
+        await this.session.send({ type: "prompt", message: "/reload" });
+      }
+      // Reconcile the pane either way (get_messages reflects the reloaded state).
+      await this.loadHistory();
+      return;
+    }
     this.dispatch({ type: "user_message", text, images });
     try {
       await this.session.send({

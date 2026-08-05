@@ -27,7 +27,15 @@ export class CommandPickerModal extends FuzzySuggestModal<SlashCommand> {
   constructor(app: App, commands: SlashCommand[], onChoose: (command: SlashCommand) => void) {
     super(app);
     this.onChoose = onChoose;
-    this.itemsList = commands;
+    // Plugin-owned command pi has no extension for (handled in conversation.prompt).
+    // Dedupe: once the reload-context extension is installed, pi also lists it.
+    const hasServerReload = commands.some((c) => c.name === "reload");
+    const pluginReload: SlashCommand = {
+      name: "reload",
+      description: "Reload pi's extensions, skills, prompts and session state from disk",
+      source: "plugin",
+    };
+    this.itemsList = hasServerReload ? commands : [pluginReload, ...commands];
     this.setPlaceholder("Type to filter slash commands (skills, templates, extensions)…");
     this.setInstructions([
       { command: "↑↓", purpose: "navigate" },

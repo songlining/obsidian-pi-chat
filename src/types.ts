@@ -42,7 +42,7 @@ export type ThinkingLevel =
 export interface SlashCommand {
   name: string;
   description: string;
-  source: "extension" | "prompt" | "skill";
+  source: "extension" | "prompt" | "skill" | "plugin";
   sourceInfo?: string;
 }
 
@@ -289,6 +289,11 @@ export interface ExtensionUiResponseCommand extends RpcCommandBase {
   value?: string;
   confirmed?: boolean;
   cancelled?: boolean;
+}
+
+export interface SpawnCommand extends RpcCommandBase {
+  type: "spawn";
+  cwd: string;
 }
 
 export type RpcCommand =
