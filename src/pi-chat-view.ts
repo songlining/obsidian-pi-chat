@@ -112,8 +112,16 @@ export class PiChatView extends ItemView {
     // Obsidian calls onOpen before setState for new views. If the leaf's state
     // arrives pointing at a different conversation than the one this view
     // bound during onOpen, re-bind so the pane shows the intended one.
-    if (incoming.conversationId && this.conversation && this.conversation.key !== incoming.conversationId) {
-      await this.rebindConversation(incoming.conversationId);
+    const target = incoming.conversationId;
+    if (target && this.conversation && this.conversation.key !== target) {
+      if (this.plugin.getConversation(target)) {
+        await this.rebindConversation(target);
+      } else {
+        // Stale id (its conversation was deleted): stay on the current
+        // binding and rewrite the view state so the layout stops referencing
+        // the stale id — never resurrect it as a new unnamed conversation.
+        this.viewState = { conversationId: this.conversation.key };
+      }
     }
   }
 
@@ -147,14 +155,15 @@ export class PiChatView extends ItemView {
 
   async onOpen(): Promise<void> {
     const state = this.getState();
-    // A pane always displays one conversation. If the leaf has no id yet (e.g.
-    // a stale layout restored without one), REUSE the most recent conversation
-    // instead of creating a new unnamed one — only create when the registry is
-    // completely empty.
-    const conversationId = state.conversationId ?? this.plugin.reuseOrCreateConversationId();
-    // Persist a generated id back into the view state so layout saves restore
-    // this same conversation.
-    if (!state.conversationId) this.viewState = { ...this.viewState, conversationId };
+    // A pane always displays one conversation. Prefer the leaf's stored id,
+    // but if it's missing OR points at a deleted/stale conversation, REUSE the
+    // most recent existing one instead of creating a new unnamed — only create
+    // when the registry is completely empty.
+    let conversationId = state.conversationId;
+    if (!conversationId || !this.plugin.getConversation(conversationId)) {
+      conversationId = this.plugin.reuseOrCreateConversationId();
+      this.viewState = { ...this.viewState, conversationId };
+    }
 
     this.conversation = await this.plugin.getOrCreateConversation(conversationId, {
       view: this,
