@@ -939,13 +939,6 @@ export class PiChatView extends ItemView {
           void this.switchToConversation(record);
         }),
     );
-    menu.addSeparator();
-    menu.addItem((item) =>
-      item
-        .setTitle("Rename conversation…")
-        .setIcon("pencil")
-        .onClick(() => this.showRename()),
-    );
     if (currentId) {
       menu.addItem((item) =>
         item
