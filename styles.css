@@ -531,8 +531,18 @@
   padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid var(--background-modifier-border);
-  background: var(--background-primary);
+  background: var(--background-secondary);
   color: var(--text-normal);
+}
+
+/* The user's theme tints its surfaces warm/cream — force a neutral gray for
+   the composer regardless of theme warmth. */
+body.theme-light .pi-chat-input {
+  background: #e8e6e3;
+}
+
+body.theme-dark .pi-chat-input {
+  background: #2b2b2b;
 }
 
 .pi-chat-input:focus {
