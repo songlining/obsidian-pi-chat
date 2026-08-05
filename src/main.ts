@@ -6,7 +6,7 @@
  * login-shell environment so ~/.pi providers, auth, models, extensions, skills
  * and sessions work exactly as in the terminal.
  */
-import { Plugin, Notice } from "obsidian";
+import { Plugin, Notice, TFile } from "obsidian";
 import { existsSync } from "fs";
 import { rm } from "fs/promises";
 import { join } from "path";
@@ -59,6 +59,19 @@ export default class PiChatPlugin extends Plugin {
             .setTitle("Ask Pi about selection")
             .setIcon("bot-message-square")
             .onClick(() => void this.openSelectionPrompt(editor, view)),
+        );
+      }),
+    );
+    // Right-click a note in the file explorer (or its tab header) → the note's
+    // content becomes part of the Pi Chat context.
+    this.registerEvent(
+      this.app.workspace.on("file-menu", (menu, file) => {
+        if (!(file instanceof TFile)) return;
+        menu.addItem((item) =>
+          item
+            .setTitle("Ask Pi about this note")
+            .setIcon("bot-message-square")
+            .onClick(() => void this.openNotePrompt(file)),
         );
       }),
     );
@@ -339,30 +352,8 @@ export default class PiChatPlugin extends Plugin {
       new Notice("Select some text in a note first, then ask Pi about it.");
       return;
     }
-    await this.ensurePiEnv();
-
-    let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_PI_CHAT)[0] ?? null;
-    const active = this.app.workspace.activeLeaf;
-    if (active && active.view instanceof PiChatView) leaf = active;
-    if (!leaf) {
-      const freshLeaf = this.app.workspace.getRightLeaf(false);
-      if (!freshLeaf) {
-        new Notice("Could not open the Pi Chat panel.");
-        return;
-      }
-      leaf = freshLeaf;
-      await freshLeaf.setViewState({ type: VIEW_TYPE_PI_CHAT, active: true, state: {} });
-    }
-    this.app.workspace.revealLeaf(leaf);
-
-    const piChat = leaf.view instanceof PiChatView ? leaf.view : null;
+    const piChat = await this.focusPiChatPane();
     if (!piChat) return;
-    // The view binds its DOM (and composer) synchronously on open; wait briefly
-    // if the leaf was just created.
-    const t0 = Date.now();
-    while (!piChat.hasComposer() && Date.now() - t0 < 5000) {
-      await new Promise((r) => setTimeout(r, 100));
-    }
 
     const path = view.file ? view.file.path : "";
     const name = view.file ? view.file.basename : "the note";
@@ -371,6 +362,63 @@ export default class PiChatPlugin extends Plugin {
     const text = `${preamble}\`\`\`\`text\n${selection}\n\`\`\`\`\n\n`;
     piChat.prefillComposer(text);
     new Notice("Selection sent to Pi Chat — type what to do with it, then press Enter.");
+  }
+
+  /**
+   * File-explorer variant of the same idea: right-click a note on the left →
+   * "Ask Pi about this note" — the note's content becomes part of the message
+   * context (capped), with its path named so pi can read the full note if asked.
+   */
+  async openNotePrompt(file: TFile): Promise<void> {
+    const piChat = await this.focusPiChatPane();
+    if (!piChat) return;
+
+    let content = "";
+    try {
+      content = await this.app.vault.read(file);
+    } catch {
+      content = "";
+    }
+    const cap = 8000;
+    const truncated = content.length > cap;
+    if (truncated) content = content.slice(0, cap) + "\n… (truncated — pi can read the full note via its tools)";
+
+    const name = file.basename;
+    const preamble = `Selected note: [[${file.path}|${name}]] (${file.path})\n\n`;
+    const text = `${preamble}\`\`\`\`text\n${content}\n\`\`\`\`\n\n`;
+    piChat.prefillComposer(text);
+    new Notice("Note added to Pi Chat — type what to do with it, then press Enter.");
+  }
+
+  /**
+   * Ensure a Pi Chat pane exists, activate it, and return its view once the
+   * composer is ready. Creates a fresh conversation when none is open.
+   */
+  private async focusPiChatPane(): Promise<PiChatView | null> {
+    await this.ensurePiEnv();
+    let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_PI_CHAT)[0] ?? null;
+    const active = this.app.workspace.activeLeaf;
+    if (active && active.view instanceof PiChatView) leaf = active;
+    if (!leaf) {
+      const freshLeaf = this.app.workspace.getRightLeaf(false);
+      if (!freshLeaf) {
+        new Notice("Could not open the Pi Chat panel.");
+        return null;
+      }
+      leaf = freshLeaf;
+      await freshLeaf.setViewState({ type: VIEW_TYPE_PI_CHAT, active: true, state: {} });
+    }
+    this.app.workspace.revealLeaf(leaf);
+
+    const piChat = leaf.view instanceof PiChatView ? leaf.view : null;
+    if (!piChat) return null;
+    // The view binds its DOM (and composer) synchronously on open; wait briefly
+    // if the leaf was just created.
+    const t0 = Date.now();
+    while (!piChat.hasComposer() && Date.now() - t0 < 5000) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return piChat;
   }
 
   private getVaultPath(): string {
