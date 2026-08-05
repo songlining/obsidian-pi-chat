@@ -336,6 +336,20 @@ export class Conversation {
         images,
         streamingBehavior: streaming ? "steer" : undefined,
       });
+      // Slash commands (extension commands like /clear, skills, templates) can
+      // mutate the session tree server-side (clear, rewind, fork) without
+      // producing agent events. If no agent run starts shortly after, re-fetch
+      // messages so the pane reflects the cleared/rewound state. Skipped while
+      // streaming — the run's own events will reconcile.
+      if (text.startsWith("/") && !streaming) {
+        const reconcile = () => {
+          if (!this.state.isRunning && !this.state.isStreaming) {
+            void this.loadHistory().catch(() => undefined);
+          }
+        };
+        setTimeout(reconcile, 400);
+        setTimeout(reconcile, 1500);
+      }
     } catch (err) {
       this.pushError(`Prompt failed: ${(err as Error).message}`);
     }
