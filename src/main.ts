@@ -100,6 +100,16 @@ export default class PiChatPlugin extends Plugin {
     return record;
   }
 
+  /**
+   * Conversation id for a pane that has none: reuse the most recent existing
+   * conversation so restarts with a stale layout don't spawn new unnamed
+   * ones. Only creates when the registry is completely empty.
+   */
+  reuseOrCreateConversationId(): string {
+    const existing = this.listConversations()[0];
+    return existing ? existing.id : this.createConversation().id;
+  }
+
   renameConversation(id: string, name: string): void {
     const record = this.getConversation(id);
     if (!record) return;

@@ -147,11 +147,11 @@ export class PiChatView extends ItemView {
 
   async onOpen(): Promise<void> {
     const state = this.getState();
-    // A pane always displays one conversation. If the leaf has none yet (e.g.
-    // an old layout), create a fresh registry entry so we never bind outside
-    // the plugin's own list.
-    const conversationId =
-      state.conversationId ?? this.plugin.createConversation().id;
+    // A pane always displays one conversation. If the leaf has no id yet (e.g.
+    // a stale layout restored without one), REUSE the most recent conversation
+    // instead of creating a new unnamed one — only create when the registry is
+    // completely empty.
+    const conversationId = state.conversationId ?? this.plugin.reuseOrCreateConversationId();
     // Persist a generated id back into the view state so layout saves restore
     // this same conversation.
     if (!state.conversationId) this.viewState = { ...this.viewState, conversationId };
