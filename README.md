@@ -12,11 +12,11 @@ Pi Chat is a thin shell over your real `pi` binary. It spawns `pi --mode rpc` pe
 
 - **Streamed markdown replies** with visible, collapsible tool-call rows
 - **Thinking blocks** — collapsed by default, expandable
-- **Session management**: new chat, resume (including terminal-created sessions), continue-latest, rename, export HTML, session stats
+- **Conversations, plugin-owned**: start empty; create, rename, switch and delete conversations in the pane. Each conversation contains a Pi session once you chat in it
 - **In-chat model switcher and thinking-level switcher** sourced from Pi's own catalogue
 - **Pi extensions work as-is** — extension `select`/`confirm`/`input`/`editor` dialogs render inline in the chat; `notify` maps to an Obsidian Notice
 - **Vault-aware tools** — `edit`/`write` tool rows link to the note, so Obsidian's native change detection refreshes edited files
-- **One leaf per conversation** — use Obsidian's native tab mechanics to switch, split, and pop out
+- **One pane, many conversations** — the bottom-right picker switches the pane between conversations in place
 
 ## Requirements
 
@@ -32,8 +32,7 @@ Pi Chat is a thin shell over your real `pi` binary. It spawns `pi --mode rpc` pe
 Open a conversation via the **bot ribbon icon** or the command palette:
 
 - `Pi Chat: New conversation`
-- `Pi Chat: Resume session…`
-- `Pi Chat: Continue last session`
+- `Pi Chat: New conversation` (also the sidebar ribbon icon)
 
 ## How it works
 
@@ -50,7 +49,7 @@ Obsidian (renderer)
 - **Binary discovery, zero-config**: resolved once via your login shell (`$SHELL -lic 'which pi'`). A manual path override exists in settings for unusual installs.
 - **Vault context is established automatically**: the subprocess runs with `cwd = vault root`, so pi loads the vault's `AGENTS.md`/`CLAUDE.md` context files, and the plugin appends the vault's `CLAUDE.md` explicitly when `AGENTS.md` would shadow it (pi loads one context file per directory, preferring `AGENTS.md`).
 - **Environment inheritance**: the subprocess gets your full login-shell environment, so `~/.pi` auth and `PI_*` variables behave exactly like in the terminal. **The plugin never stores or requests API keys.**
-- **Sessions are Pi's, not the plugin's**: resume lists this vault's sessions straight from `~/.pi/agent/sessions/`. Terminal-created sessions appear here, and vice-versa.
+- **Conversations are the plugin's; sessions are Pi's**: the plugin keeps a small registry of conversations in `data.json` (starting empty). Each conversation *contains* a Pi session (`~/.pi/agent/sessions/…`) once you've chatted in it; deleting a conversation removes its session file too.
 
 ## Settings
 
@@ -67,7 +66,7 @@ Everything else lives in `~/.pi` by design.
 ## Privacy
 
 - All model traffic goes directly from the local `pi` process to your configured provider, using **your** credentials from `~/.pi`.
-- The plugin stores no conversations, no API keys, and no analytics. Plugin `data.json` holds only trivial UI preferences (paths, export folder, tab→session pointers).
+- The plugin stores no API keys and no analytics. Plugin `data.json` holds UI preferences plus the conversation registry (ids, names, session pointers) — nothing else.
 - Tools run with no approval gate and full filesystem access to the vault (the same trust model as running `pi` in a terminal pointed at the vault).
 
 ## Troubleshooting

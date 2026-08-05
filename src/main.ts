@@ -8,13 +8,19 @@
  */
 import { Plugin, Notice } from "obsidian";
 import { existsSync } from "fs";
+import { rm } from "fs/promises";
 import { join } from "path";
 import { PiChatView, VIEW_TYPE_PI_CHAT } from "./pi-chat-view";
 import { Conversation } from "./conversation";
 import { detectPi, getPiVersion, type PiEnvironment } from "./env";
-import { listSessions } from "./session-store";
+import { getSessionDir } from "./session-store";
+import {
+  createConversationRecord,
+  newConversationId,
+  sortConversations,
+  type ConversationRecord,
+} from "./conversation-store";
 import { DEFAULT_SETTINGS, PiChatSettingTab, type PiChatSettings } from "./modals";
-import { ResumeSessionModal } from "./modals";
 
 interface ConversationEntry {
   conversation: Conversation;
@@ -38,16 +44,6 @@ export default class PiChatPlugin extends Plugin {
       id: "new-chat",
       name: "Pi Chat: New conversation",
       callback: () => void this.openNewChat(),
-    });
-    this.addCommand({
-      id: "resume-session",
-      name: "Pi Chat: Resume session…",
-      callback: () => void this.openResumeModal(),
-    });
-    this.addCommand({
-      id: "continue-last",
-      name: "Pi Chat: Continue last session",
-      callback: () => void this.openContinueLast(),
     });
 
     this.addSettingTab(new PiChatSettingTab(this.app, this, this.settings, (s) => void this.saveSettings()));
@@ -85,15 +81,74 @@ export default class PiChatPlugin extends Plugin {
   }
 
   // -------------------------------------------------------------------------
+  // Conversation registry
+  // -------------------------------------------------------------------------
+
+  getConversation(id: string): ConversationRecord | undefined {
+    return this.settings.conversations.find((c) => c.id === id);
+  }
+
+  listConversations(): ConversationRecord[] {
+    return sortConversations(this.settings.conversations);
+  }
+
+  /** Create and persist a fresh, empty conversation. */
+  createConversation(): ConversationRecord {
+    const record = createConversationRecord();
+    this.settings.conversations.push(record);
+    void this.saveSettings();
+    return record;
+  }
+
+  renameConversation(id: string, name: string): void {
+    const record = this.getConversation(id);
+    if (!record) return;
+    record.name = name.trim();
+    record.updatedAt = Date.now();
+    void this.saveSettings();
+  }
+
+  /** Record which Pi session a conversation now contains. */
+  setConversationSession(id: string, file: string): void {
+    const record = this.getConversation(id);
+    if (!record) return;
+    if (record.sessionFile === file) return;
+    record.sessionFile = file;
+    record.updatedAt = Date.now();
+    void this.saveSettings();
+  }
+
+  /** Remove a conversation (and its contained Pi session file) from the registry. */
+  deleteConversation(id: string): void {
+    this.settings.conversations = this.settings.conversations.filter((c) => c.id !== id);
+    void this.saveSettings();
+  }
+
+  /**
+   * Delete a Pi session file owned by a conversation. Only files inside the
+   * vault's session directory are touched, never anything else.
+   */
+  async deleteConversationFile(file: string): Promise<void> {
+    const dir = getSessionDir(this.getVaultPath());
+    if (!file.startsWith(dir + "/") || !file.endsWith(".jsonl")) {
+      throw new Error(`Refusing to delete ${file}: outside session dir`);
+    }
+    await rm(file, { force: true });
+  }
+
+  // -------------------------------------------------------------------------
   // Conversation lifecycle
   // -------------------------------------------------------------------------
 
   /**
-   * Get (or create) the conversation for a session key and attach a view.
+   * Get (or create) the conversation wrapper for a conversation id and attach
+   * a view. Resolves the id to a registry record: a conversation that has
+   * already contained a Pi session resumes that file; a fresh one spawns a new
+   * Pi session on first message.
    */
   async getOrCreateConversation(
-    key: string,
-    opts: { sessionArg?: string[]; view: PiChatView; force?: boolean },
+    id: string,
+    opts: { view: PiChatView; force?: boolean },
   ): Promise<Conversation | null> {
     const env = await this.ensurePiEnv();
     if (!env?.binaryPath) {
@@ -101,7 +156,16 @@ export default class PiChatPlugin extends Plugin {
       return null;
     }
 
-    let entry = this.conversations.get(key);
+    // Unknown id (e.g. leftover leaf from an old layout): create a record so
+    // the pane stays bound to something in the registry.
+    let record = this.getConversation(id);
+    if (!record) {
+      record = createConversationRecord(id);
+      this.settings.conversations.push(record);
+      void this.saveSettings();
+    }
+
+    let entry = this.conversations.get(id);
     if (entry && !opts.force && entry.conversation.session.isAlive) {
       entry.views.add(opts.view);
       return entry.conversation;
@@ -112,15 +176,14 @@ export default class PiChatPlugin extends Plugin {
       entry.conversation.dispose();
     } else {
       entry = { conversation: null as unknown as Conversation, views: new Set() };
-      this.conversations.set(key, entry);
+      this.conversations.set(id, entry);
     }
 
-    const persisted = this.settings.tabSessions[key];
-    const resolvedArg = opts.sessionArg ?? (persisted ? ["--session", persisted] : undefined);
+    const resolvedArg = record.sessionFile ? ["--session", record.sessionFile] : undefined;
     const vaultPath = this.getVaultPath();
     const contextAppend = this.getShadowedContextFile(vaultPath);
     const conversation = new Conversation(
-      key,
+      id,
       {
         binaryPath: env.binaryPath,
         cwd: vaultPath,
@@ -138,9 +201,9 @@ export default class PiChatPlugin extends Plugin {
       },
       {
         onSessionFile: (file) => {
-          // Persist the tab -> session mapping so restarts resume the same file.
-          this.settings.tabSessions[key] = file;
-          void this.saveSettings();
+          // The conversation now contains a real Pi session — persist it so
+          // switching back resumes the same file.
+          this.setConversationSession(id, file);
         },
         onSpawnError: (message) => {
           console.warn("[pi-chat] spawn handshake failed:", message);
@@ -156,19 +219,23 @@ export default class PiChatPlugin extends Plugin {
   }
 
   detachView(view: PiChatView): void {
-    const key = view.getState().sessionKey;
-    if (!key) return;
-    const entry = this.conversations.get(key);
+    const id = view.getState().conversationId;
+    if (id) this.detachViewFor(id, view);
+  }
+
+  /** Detach a view from a specific conversation (grace-disposes the subprocess). */
+  detachViewFor(id: string, view: PiChatView): void {
+    const entry = this.conversations.get(id);
     if (!entry) return;
     entry.views.delete(view);
     // Keep the subprocess alive briefly in case the leaf re-attaches
     // (layout switches, tab moves); dispose after a grace period.
     if (entry.views.size === 0) {
       const t = window.setTimeout(() => {
-        const e = this.conversations.get(key);
+        const e = this.conversations.get(id);
         if (e && e.views.size === 0) {
           e.conversation.dispose();
-          this.conversations.delete(key);
+          this.conversations.delete(id);
         }
       }, 5000);
       (entry as ConversationEntry & { disposeTimer?: number }).disposeTimer = t;
@@ -176,68 +243,46 @@ export default class PiChatPlugin extends Plugin {
   }
 
   async retryConversation(view: PiChatView): Promise<Conversation | null> {
-    const key = view.getState().sessionKey;
-    if (!key) return null;
-    // Force a fresh conversation on the same key (reuses persisted sessionArg).
-    return this.getOrCreateConversation(key, { view, force: true });
+    const id = view.getState().conversationId;
+    if (!id) return null;
+    // Force a fresh conversation on the same id (reuses persisted sessionArg).
+    return this.getOrCreateConversation(id, { view, force: true });
   }
 
   // -------------------------------------------------------------------------
   // Opening leaves
   // -------------------------------------------------------------------------
 
-  private async openLeaf(state: { sessionKey?: string; sessionArg?: string[] }): Promise<void> {
+  private async openLeaf(state: { conversationId?: string }): Promise<void> {
     const leaf = this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
-    const sessionKey = state.sessionKey ?? `conv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    // If no conversation is specified, the view creates a fresh one on open.
     await leaf.setViewState({
       type: VIEW_TYPE_PI_CHAT,
       active: true,
-      state: { ...state, sessionKey },
+      state: state.conversationId ? { conversationId: state.conversationId } : {},
     });
     this.app.workspace.revealLeaf(leaf);
   }
 
   async openNewChat(): Promise<void> {
     await this.ensurePiEnv();
-    await this.openLeaf({});
+    // A brand-new conversation, bound into a fresh leaf state. Passing the id
+    // explicitly matters: setViewState on a live leaf calls setState in place,
+    // and without an id the current conversation would just be kept.
+    const record = this.createConversation();
+    await this.openLeaf({ conversationId: record.id });
   }
 
-  /** Open a brand-new tab with a fresh session (multitasking). */
-  async openNewTab(): Promise<void> {
+  /** Switch the given leaf to a conversation (re-binds the view to it). */
+  async showConversationInLeaf(leaf: import("obsidian").WorkspaceLeaf, conversationId: string): Promise<void> {
     await this.ensurePiEnv();
-    const leaf = this.app.workspace.getLeaf("tab");
-    if (!leaf) return;
     await leaf.setViewState({
       type: VIEW_TYPE_PI_CHAT,
       active: true,
-      state: {
-        sessionKey: `conv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-      },
+      state: { conversationId },
     });
     this.app.workspace.revealLeaf(leaf);
-  }
-
-  async openContinueLast(): Promise<void> {
-    await this.ensurePiEnv();
-    await this.openLeaf({ sessionArg: ["-c"] });
-  }
-
-  async openResumeModal(): Promise<void> {
-    const env = await this.ensurePiEnv();
-    if (!env?.binaryPath) {
-      new Notice("Pi binary not found. Configure it in Pi Chat settings.");
-      return;
-    }
-    const sessions = await listSessions(this.getVaultPath());
-    if (sessions.length === 0) {
-      new Notice("No Pi sessions found for this vault.");
-      return;
-    }
-    const modal = new ResumeSessionModal(this.app, sessions, (s) => {
-      void this.openLeaf({ sessionArg: ["--session", s.file] });
-    });
-    modal.open();
   }
 
   private getVaultPath(): string {
@@ -245,11 +290,6 @@ export default class PiChatPlugin extends Plugin {
     const adapter = this.app.vault.adapter as { getBasePath?: () => string };
     if (adapter.getBasePath) return adapter.getBasePath();
     return this.app.vault.getRoot().path ?? "/";
-  }
-
-  /** List this vault's Pi sessions (newest first), for resume and the picker. */
-  async listVaultSessions(): Promise<Awaited<ReturnType<typeof listSessions>>> {
-    return listSessions(this.getVaultPath());
   }
 
   /**

@@ -20,12 +20,13 @@ import type PiChatPlugin from "./main";
 import type { Conversation } from "./conversation";
 import type { UiMessage, UiState, ToolCallUi } from "./reducer";
 import { contentBlocksToParts, toolArgsSummary } from "./reducer";
+import { conversationLabel } from "./conversation-store";
 import type { ExtensionUiRequest, ImageContent, ThinkingLevel } from "./types";
 import {
   CommandPickerModal,
+  ConfirmModal,
   ModelSwitcherModal,
   RenameSessionModal,
-  ResumeSessionModal,
   SessionInfoModal,
   ThinkingLevelModal,
 } from "./modals";
@@ -35,14 +36,15 @@ export const VIEW_TYPE_PI_CHAT = "pi-chat";
 const RENDER_THROTTLE_MS = 100;
 
 interface ViewStatePayload {
-  sessionKey?: string;
-  sessionArg?: string[];
+  conversationId?: string;
   [key: string]: unknown;
 }
 
 export class PiChatView extends ItemView {
   plugin: PiChatPlugin;
   conversation: Conversation | null = null;
+  /** View state (conversationId) kept in sync with the leaf's ViewState. */
+  private viewState: ViewStatePayload = {};
 
   private headerEl!: HTMLElement;
   private nameInputEl!: HTMLInputElement;
@@ -87,8 +89,48 @@ export class PiChatView extends ItemView {
   }
 
   getState(): ViewStatePayload {
-    const state = super.getState() as ViewStatePayload;
-    return state ?? {};
+    return this.viewState;
+  }
+
+  async setState(state: unknown, result: import("obsidian").ViewStateResult): Promise<void> {
+    const incoming = (state as ViewStatePayload) ?? {};
+    // Layout restore often delivers {} — keep the id this view bound during
+    // onOpen so it gets persisted on the next layout save.
+    if (!incoming.conversationId && this.viewState.conversationId) {
+      incoming.conversationId = this.viewState.conversationId;
+    }
+    this.viewState = incoming;
+    await super.setState(state, result);
+    // Obsidian calls onOpen before setState for new views. If the leaf's state
+    // arrives pointing at a different conversation than the one this view
+    // bound during onOpen, re-bind so the pane shows the intended one.
+    if (incoming.conversationId && this.conversation && this.conversation.key !== incoming.conversationId) {
+      await this.rebindConversation(incoming.conversationId);
+    }
+  }
+
+  /** Swap this view to a different conversation (same leaf, fresh subprocess). */
+  private async rebindConversation(id: string): Promise<void> {
+    const oldId = this.conversation?.key;
+    this.viewState = { conversationId: id };
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.unsubNotif?.();
+    this.unsubNotif = null;
+    if (oldId && oldId !== id) {
+      this.plugin.detachViewFor(oldId, this);
+      // If the previous id was only a placeholder created while opening (no
+      // session, no name), drop it instead of leaving an empty registry entry.
+      const old = this.plugin.getConversation(oldId);
+      if (old && !old.sessionFile && !old.name) this.plugin.deleteConversation(oldId);
+    }
+    const conv = await this.plugin.getOrCreateConversation(id, { view: this, force: true });
+    if (!conv) return;
+    this.conversation = conv;
+    this.renderLayout();
+    this.unsubscribe = conv.subscribe((s) => this.render(s));
+    this.unsubNotif = conv.onUiNotification((req) => this.handleUiNotification(req));
+    void conv.loadHistory().catch(() => undefined);
   }
 
   // -------------------------------------------------------------------------
@@ -97,11 +139,16 @@ export class PiChatView extends ItemView {
 
   async onOpen(): Promise<void> {
     const state = this.getState();
-    const sessionKey = state.sessionKey ?? `conv-${Date.now().toString(36)}`;
-    const sessionArg = state.sessionArg;
+    // A pane always displays one conversation. If the leaf has none yet (e.g.
+    // an old layout), create a fresh registry entry so we never bind outside
+    // the plugin's own list.
+    const conversationId =
+      state.conversationId ?? this.plugin.createConversation().id;
+    // Persist a generated id back into the view state so layout saves restore
+    // this same conversation.
+    if (!state.conversationId) this.viewState = { ...this.viewState, conversationId };
 
-    this.conversation = await this.plugin.getOrCreateConversation(sessionKey, {
-      sessionArg,
+    this.conversation = await this.plugin.getOrCreateConversation(conversationId, {
       view: this,
     });
     if (!this.conversation) {
@@ -222,7 +269,7 @@ export class PiChatView extends ItemView {
       setIcon(icon, "pencil");
       this.nameInputEl = rename.createEl("input", {
         cls: "pi-chat-name-input",
-        attr: { placeholder: "Session name — click to rename", spellcheck: "false" },
+        attr: { placeholder: "Conversation name — click to rename", spellcheck: "false" },
       });
       this.nameInputEl.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
@@ -317,7 +364,7 @@ export class PiChatView extends ItemView {
 
     this.messagesEl.createDiv({
       cls: "pi-chat-welcome",
-      text: "Start typing to begin a new session, or pick an existing session from the tab picker (bottom-right).",
+      text: "Start typing to begin a new conversation, or pick an existing conversation from the picker (bottom-right).",
     });
   }
 
@@ -462,8 +509,8 @@ export class PiChatView extends ItemView {
 
   /** Restart the underlying subprocess and re-attach to a fresh conversation. */
   async retry(): Promise<void> {
-    const key = this.getState().sessionKey;
-    if (!key) return;
+    const id = this.getState().conversationId;
+    if (!id) return;
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.unsubNotif?.();
@@ -475,7 +522,7 @@ export class PiChatView extends ItemView {
     this.messageEls.clear();
     this.messagesEl.createDiv({
       cls: "pi-chat-welcome",
-      text: "Start typing to begin a new session, or pick an existing session from the tab picker (bottom-right).",
+      text: "Start typing to begin a new conversation, or pick an existing conversation from the picker (bottom-right).",
     });
     this.unsubscribe = conv.subscribe((s) => this.render(s));
     this.unsubNotif = conv.onUiNotification((req) => this.handleUiNotification(req));
@@ -810,7 +857,20 @@ export class PiChatView extends ItemView {
   private showRename(): void {
     const conv = this.conversation;
     if (!conv) return;
-    new RenameSessionModal(this.app, conv.state.sessionName ?? "", (name) => void conv.rename(name)).open();
+    new RenameSessionModal(
+      this.app,
+      conv.state.sessionName ?? "",
+      (name) => void this.renameConversation(name),
+    ).open();
+  }
+
+  /** Rename the current conversation (registry + its contained Pi session). */
+  private renameConversation(name: string): void {
+    const conv = this.conversation;
+    if (!conv) return;
+    const id = this.getState().conversationId;
+    if (id) this.plugin.renameConversation(id, name);
+    void conv.rename(name);
   }
 
   private applyRenameFromInput(): void {
@@ -818,7 +878,7 @@ export class PiChatView extends ItemView {
     if (!conv) return;
     const value = this.nameInputEl.value.trim();
     if (value && value !== conv.state.sessionName) {
-      void conv.rename(value);
+      this.renameConversation(value);
     } else {
       this.revertNameInput();
     }
@@ -830,56 +890,50 @@ export class PiChatView extends ItemView {
   }
 
   /** Bottom-right tab picker: the pane's sessions ("tabs"), switched in place. */
+  /** Bottom-right picker: the plugin's conversations, managed here. */
   private async showTabMenu(anchor: HTMLElement, evt?: MouseEvent): Promise<void> {
     const conv = this.conversation;
     if (!conv) return;
-    const sessions = await this.plugin.listVaultSessions();
+    const currentId = this.getState().conversationId;
+    const records = this.plugin.listConversations();
     const menu = new Menu();
-    const currentFile = conv.sessionFile;
 
-    // Recent sessions are the "tabs" — picking one displays it in this same
-    // pane (switch_session), no new leaf involved.
-    for (const s of sessions.slice(0, 12)) {
-      const label = sessionMenuLabel(s);
-      const active = s.file === currentFile;
+    // Every plugin-owned conversation (newest first). Picking one switches
+    // this pane to it; the current one is checked.
+    for (const record of records) {
+      const label = conversationLabel(record);
+      const active = record.id === currentId;
       menu.addItem((item) => {
         item.setTitle(label);
         if (active) item.setChecked(true);
-        item.onClick(() => void conv.switchSession(s.file));
+        item.onClick(() => void this.switchToConversation(record));
         return item;
       });
     }
 
     menu.addItem((item) =>
       item
-        .setTitle("New session")
+        .setTitle("New conversation")
         .setIcon("plus")
-        .onClick(() => void conv.newSession()),
-    );
-    menu.addItem((item) =>
-      item
-        .setTitle("Browse all sessions…")
-        .setIcon("search")
         .onClick(() => {
-          const modal = new ResumeSessionModal(this.app, sessions, (s) =>
-            void conv.switchSession(s.file),
-          );
-          modal.open();
+          const record = this.plugin.createConversation();
+          void this.switchToConversation(record);
         }),
     );
     menu.addSeparator();
     menu.addItem((item) =>
       item
-        .setTitle("Rename session…")
+        .setTitle("Rename conversation…")
         .setIcon("pencil")
         .onClick(() => this.showRename()),
     );
-    if (conv.sessionFile) {
+    if (currentId) {
       menu.addItem((item) =>
         item
-          .setTitle("Copy session file path")
-          .setIcon("copy")
-          .onClick(() => void navigator.clipboard.writeText(conv.sessionFile ?? "")),
+          .setTitle("Delete this conversation…")
+          .setIcon("trash-2")
+          .setWarning(true)
+          .onClick(() => void this.deleteCurrentConversation()),
       );
     }
     if (evt) {
@@ -890,6 +944,39 @@ export class PiChatView extends ItemView {
     }
   }
 
+  /** Switch this pane to a conversation (re-binds the view + subprocess). */
+  private async switchToConversation(record: import("./conversation-store").ConversationRecord): Promise<void> {
+    const currentId = this.getState().conversationId;
+    if (record.id === currentId) return;
+    await this.plugin.showConversationInLeaf(this.leaf, record.id);
+  }
+
+  /** Delete the current conversation, then park the pane on a fresh one. */
+  private async deleteCurrentConversation(): Promise<void> {
+    const currentId = this.getState().conversationId;
+    if (!currentId) return;
+    const record = this.plugin.getConversation(currentId);
+    const label = record ? conversationLabel(record) : "this conversation";
+    const confirmed = await new Promise<boolean>((resolve) => {
+      const modal = new ConfirmModal(this.app, `Delete “${label}”?`, `Its contained Pi session file will also be removed. This cannot be undone.`, (ok) => resolve(ok));
+      modal.open();
+    });
+    if (!confirmed) return;
+    // Remove the contained Pi session file too, so the registry is the single
+    // source of truth and stray sessions don't linger.
+    if (record?.sessionFile) {
+      try {
+        await this.plugin.deleteConversationFile(record.sessionFile);
+      } catch (e) {
+        console.warn("[pi-chat] could not delete session file", e);
+      }
+    }
+    this.plugin.deleteConversation(currentId);
+    const fresh = this.plugin.createConversation();
+    await this.plugin.showConversationInLeaf(this.leaf, fresh.id);
+    new Notice("Conversation deleted.");
+  }
+
   private showMenu(anchor: HTMLElement, evt?: MouseEvent): void {
     const conv = this.conversation;
     if (!conv) return;
@@ -898,11 +985,11 @@ export class PiChatView extends ItemView {
     // and new chat — this menu holds the session utilities only.
     menu.addItem((item) =>
       item
-        .setTitle("Session info…")
+        .setTitle("Conversation info…")
         .setIcon("info")
         .onClick(() => {
           void conv.getStats().then((stats) => {
-            new SessionInfoModal(this.app, stats, conv.state.sessionName ?? "Session info").open();
+            new SessionInfoModal(this.app, stats, conv.state.sessionName ?? "Conversation info").open();
           });
         }),
     );
@@ -972,12 +1059,6 @@ function toolIconFor(name: string): string {
 /** Compact label for the session picker menu: the session's tab name.
  *  Tab names come from the Rename button (pi's session_info name). Unnamed
  *  sessions show a clean placeholder instead of raw message content. */
-function sessionMenuLabel(s: { name?: string; id: string; mtime: number }): string {
-  const label = s.name && s.name.length > 0 ? s.name : "Unnamed session";
-  const date = new Date(s.mtime).toLocaleDateString();
-  return `${label}  ·  ${date}`;
-}
-
 function statusTextFor(status: ToolCallUi["status"]): string {
   switch (status) {
     case "pending":

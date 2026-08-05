@@ -15,7 +15,6 @@ import {
   TextComponent,
 } from "obsidian";
 import type { Model, SessionStatsData, SlashCommand, ThinkingLevel } from "./types";
-import { sessionDisplayName, sessionSubtitle, type SessionSummary } from "./session-store";
 
 // ---------------------------------------------------------------------------
 // Slash commands (skills, templates, extension commands)
@@ -56,43 +55,6 @@ export class CommandPickerModal extends FuzzySuggestModal<SlashCommand> {
 
   onChooseItem(command: SlashCommand, _evt: MouseEvent | KeyboardEvent): void {
     this.onChoose(command);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Resume session
-// ---------------------------------------------------------------------------
-
-export class ResumeSessionModal extends FuzzySuggestModal<SessionSummary> {
-  private itemsList: SessionSummary[];
-  private onChoose: (s: SessionSummary) => void;
-
-  constructor(app: App, items: SessionSummary[], onChoose: (s: SessionSummary) => void) {
-    super(app);
-    this.onChoose = onChoose;
-    this.itemsList = items;
-    this.setPlaceholder("Resume a Pi session…");
-  }
-
-  getItems(): SessionSummary[] {
-    return this.itemsList;
-  }
-
-  getItemText(item: SessionSummary): string {
-    return `${sessionDisplayName(item)} ${item.id}`;
-  }
-
-  renderSuggestion(match: import("obsidian").FuzzyMatch<SessionSummary>, el: HTMLElement): void {
-    const item = match.item;
-    el.empty();
-    const nameEl = el.createDiv({ cls: "pi-chat-suggestion-name" });
-    nameEl.setText(sessionDisplayName(item));
-    const subEl = el.createDiv({ cls: "pi-chat-suggestion-sub" });
-    subEl.setText(sessionSubtitle(item));
-  }
-
-  onChooseItem(item: SessionSummary, _evt: MouseEvent | KeyboardEvent): void {
-    this.onChoose(item);
   }
 }
 
@@ -216,6 +178,28 @@ export class SessionInfoModal extends Modal {
 // Rename session
 // ---------------------------------------------------------------------------
 
+export class ConfirmModal extends Modal {
+  constructor(
+    app: App,
+    title: string,
+    message: string,
+    onResult: (confirmed: boolean) => void,
+  ) {
+    super(app);
+    this.titleEl.setText(title);
+    this.contentEl.createDiv({ text: message });
+    const row = this.contentEl.createDiv({ cls: "pi-chat-modal-actions" });
+    new ButtonComponent(row).setButtonText("Cancel").onClick(() => {
+      onResult(false);
+      this.close();
+    });
+    new ButtonComponent(row).setButtonText("Delete").setWarning().onClick(() => {
+      onResult(true);
+      this.close();
+    });
+  }
+}
+
 export class RenameSessionModal extends Modal {
   constructor(
     app: App,
@@ -223,10 +207,10 @@ export class RenameSessionModal extends Modal {
     onSubmit: (name: string) => void,
   ) {
     super(app);
-    this.titleEl.setText("Rename session");
+    this.titleEl.setText("Rename conversation");
 
     const input = new TextComponent(this.contentEl);
-    input.setPlaceholder("Session name");
+    input.setPlaceholder("Conversation name");
     input.inputEl.addClass("pi-chat-rename-input");
     if (currentName) input.setValue(currentName);
     input.inputEl.addEventListener("keydown", (e) => {
@@ -261,15 +245,15 @@ export interface PiChatSettings {
   extraArgs: string[];
   /** Folder (relative to vault) for HTML exports. */
   exportFolder: string;
-  /** sessionKey -> sessionFile mapping for tab restore across restarts. */
-  tabSessions: Record<string, string>;
+  /** Plugin-owned conversations (each contains a Pi session once chatted). */
+  conversations: import("./conversation-store").ConversationRecord[];
 }
 
 export const DEFAULT_SETTINGS: PiChatSettings = {
   piPath: "",
   extraArgs: [],
   exportFolder: "pi-chat-exports",
-  tabSessions: {},
+  conversations: [],
 };
 
 export class PiChatSettingTab extends PluginSettingTab {

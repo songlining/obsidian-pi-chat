@@ -316,7 +316,7 @@ export class Conversation {
           prevName || (prevFile ? prevFile.slice(prevFile.lastIndexOf("/") + 1) : undefined);
         this.pushSystem(
           prevLabel
-            ? `Started a new session. "${prevLabel}" was saved — use the “Pi Chat: Resume session” command to return to it.`
+            ? `Started a new session. "${prevLabel}" is still saved — pick it again from the conversation picker (bottom-right).`
             : "Started a new session.",
         );
       }
